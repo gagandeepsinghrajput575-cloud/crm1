@@ -24,8 +24,17 @@ declare module 'fastify' {
   }
 }
 
-/** Routes that must stay reachable without a key. */
-const PUBLIC_ROUTES = new Set(['/health', '/health/live', '/health/ready', '/'])
+/**
+ * Routes that stay reachable without a key.
+ *
+ * The rule is prefix-based rather than an ever-growing allowlist: everything
+ * under `/api` requires a key, everything else (the static UI, Swagger assets,
+ * health probes) is public. Health endpoints are the reason — an orchestrator
+ * or a load balancer has no API key.
+ */
+
+/** Only these live outside `/api` and `/health`, `/docs`, `/`. */
+const PUBLIC_PREFIXES = ['/api/']
 
 /** Only touch the database to record usage this often, not on every request. */
 const USAGE_WRITE_INTERVAL_MS = 60_000
@@ -56,9 +65,8 @@ export const authPlugin = fp(
       if (req.method === 'OPTIONS') return
 
       const path = req.url.split('?')[0] ?? ''
-      if (PUBLIC_ROUTES.has(path)) return
-      // Swagger assets are static and carry no data.
-      if (path.startsWith('/docs') || path === '/openapi.json') return
+      // Static UI, docs and health are public; the whole /api surface is not.
+      if (!PUBLIC_PREFIXES.some((p) => path.startsWith(p))) return
 
       const provided = extractKey(req)
       if (!provided) {

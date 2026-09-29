@@ -68,7 +68,9 @@ jobs:
       - name: Build image
         uses: docker/build-push-action@v6
         with:
-          context: ./server
+          # Repo root: the image also ships the static UI from index.html + js/.
+          context: .
+          file: server/Dockerfile
           push: false
           load: true
           tags: dialflow-api:ci
@@ -85,6 +87,8 @@ jobs:
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:4000/health/ready > /dev/null; then
               echo "container healthy after ${i}s"
+              # The UI and the API must be reachable from the same origin.
+              curl -fsS http://127.0.0.1:4000/ | grep -q '<!DOCTYPE html>'
               curl -fsS -H 'Authorization: Bearer df_ci_key_for_github_actions_0123456789' \
                 http://127.0.0.1:4000/api/settings/runtime
               docker rm -f dialflow

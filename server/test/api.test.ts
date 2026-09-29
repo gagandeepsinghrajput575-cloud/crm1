@@ -558,6 +558,57 @@ describe('api keys', () => {
   })
 })
 
+describe('static UI serving', () => {
+  // server/.env sets STATIC_DIR=.., so these run with the file server mounted
+  // against the real repository root — i.e. the real deployment shape.
+
+  it('serves the UI at /', async () => {
+    const res = await ctx.app.inject({ method: 'GET', url: '/' })
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toContain('text/html')
+    expect(res.body).toContain('<!DOCTYPE html>')
+    // The client modules must actually be referenced, or the page loads and
+    // then sits on the localStorage cache forever with no visible error.
+    expect(res.body).toContain('js/api.js')
+    expect(res.body).toContain('js/sync.js')
+  })
+
+  it('serves the client modules', async () => {
+    for (const path of ['/js/api.js', '/js/sync.js']) {
+      const res = await ctx.app.inject({ method: 'GET', url: path })
+      expect(res.statusCode, path).toBe(200)
+      expect(res.body).toContain('Dialflow')
+    }
+  })
+
+  it('does not cache the HTML shell but does cache assets', async () => {
+    // A cached index.html pointing at a newer bundle is silent breakage.
+    const html = await ctx.app.inject({ method: 'GET', url: '/' })
+    expect(html.headers['cache-control']).toBe('no-cache')
+
+    const asset = await ctx.app.inject({ method: 'GET', url: '/js/api.js' })
+    expect(asset.headers['cache-control']).toContain('max-age')
+  })
+
+  it('requires a key for the API but not for the UI', async () => {
+    const root = await ctx.app.inject({ method: 'GET', url: '/' })
+    const asset = await ctx.app.inject({ method: 'GET', url: '/js/api.js' })
+    const api = await ctx.app.inject({ method: 'GET', url: '/api/leads' })
+
+    expect(root.statusCode).toBe(200)
+    expect(asset.statusCode).toBe(200)
+    // Mounting static files must not weaken the API lock.
+    expect(api.statusCode).toBe(401)
+  })
+
+  it('still serves the API with a key while static is mounted', async () => {
+    const res = await get('/api/leads')
+    expect(res.statusCode).toBe(200)
+    // The static wildcard must not shadow explicit /api routes.
+    expect(res.headers['content-type']).toContain('application/json')
+  })
+})
+
 describe('cross-origin access', () => {
   // The vitest env leaves CORS_ORIGIN empty, so `origin: false`. These tests
   // pin the behaviour that matters regardless of the allow-list: a browser
@@ -575,6 +626,20 @@ describe('cross-origin access', () => {
     // Browsers never send credentials on a preflight, so a 401 here makes every
     // cross-origin client fail with an opaque network error.
     expect(res.statusCode).toBe(204)
+    expect(res.headers['access-control-allow-origin']).toBe('http://127.0.0.1:5173')
+    expect(res.headers['access-control-allow-headers']).toContain('authorization')
+  })
+
+  it('does not grant access to an origin outside the allow-list', async () => {
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/leads',
+      headers: { ...authHeader, origin: 'http://evil.example' },
+    })
+    expect(res.statusCode).toBe(200)
+    // The request itself succeeds (the key is valid) but the browser is told
+    // nothing, so it discards the response rather than exposing it.
+    expect(res.headers['access-control-allow-origin']).toBeUndefined()
   })
 
   it('does not set Cross-Origin-Resource-Policy to same-origin', async () => {

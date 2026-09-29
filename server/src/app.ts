@@ -2,8 +2,11 @@ import Fastify, { LogController, type FastifyInstance } from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
+import fastifyStatic from '@fastify/static'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { config } from './config/env.js'
 import { createDb, type Db } from './db.js'
 import { authPlugin } from './plugins/auth.js'
@@ -152,6 +155,61 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
   await app.register(importRoutes, { db, agentTimezone })
   await app.register(analyticsRoutes, { db })
   await app.register(settingsRoutes, { db, provider })
+
+  /**
+   * Serve the static UI from the API, so the whole app is a single origin.
+   *
+   * This is not just convenience. With the UI on a different origin, every
+   * request needs a correct CORS allow-list and the browser has to discover
+   * where the API lives — both of which break the moment the app is reached
+   * from another machine, a preview host, or a tunnel. Same-origin removes the
+   * whole class of problem, and it matches how this actually gets deployed:
+   * one container, one URL.
+   *
+   * Explicit `/api/...` routes take priority over the `/*` wildcard, so
+   * registering this cannot shadow the API.
+   */
+  const staticDir = process.env.STATIC_DIR?.trim() ? resolve(process.env.STATIC_DIR) : null
+  if (staticDir && existsSync(resolve(staticDir, 'index.html'))) {
+    await app.register(fastifyStatic, {
+      root: staticDir,
+      prefix: '/',
+      index: ['index.html'],
+      // A cached index.html pointing at a newer bundle is the classic silent
+      // breakage, so the shell is always revalidated and assets are cached.
+      cacheControl: true,
+      maxAge: '1h',
+      setHeaders(res, filePath) {
+        if (!filePath.endsWith('.html')) return
+        // @fastify/static types this callback as receiving a FastifyReply but
+        // passes the raw ServerResponse at runtime. Support both rather than
+        // guess and silently ship a wrong header.
+        const value = 'no-cache'
+        const target = res as unknown as {
+          header?: (k: string, v: string) => void
+          setHeader?: (k: string, v: string) => void
+        }
+        if (typeof target.header === 'function') target.header('cache-control', value)
+        else target.setHeader?.('cache-control', value)
+      },
+    })
+    app.log.info({ staticDir }, 'serving static UI')
+  } else if (staticDir) {
+    app.log.warn({ staticDir }, 'STATIC_DIR has no index.html — UI will not be served')
+  } else {
+    app.log.info('STATIC_DIR not set — API only, no UI')
+  }
+
+  // Only when there is no UI: `/` would otherwise 404 and give an API-only
+  // deployment no indication of where anything lives.
+  if (!staticDir || !existsSync(resolve(staticDir, 'index.html'))) {
+    app.get('/', async () => ({
+      name: 'dialflow-api',
+      docs: config.DISABLE_DOCS ? null : '/docs',
+      health: '/health',
+      hint: 'Set STATIC_DIR to the directory containing index.html to serve the UI from here.',
+    }))
+  }
 
   app.addHook('onClose', async () => {
     if (!opts.db) await db.$disconnect()

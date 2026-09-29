@@ -24,9 +24,19 @@ npm run seed          # 12 demo leads, same data the UI used to fake
 npm run dev
 ```
 
-- API → http://localhost:4000
-- Swagger UI → http://localhost:4000/docs
-- Health → http://localhost:4000/health
+Then open **http://localhost:4000**.
+
+| URL | |
+| --- | --- |
+| `/` | The Dialflow UI |
+| `/docs` | Swagger UI |
+| `/health` | Health |
+
+The server serves the UI itself (`STATIC_DIR`, default `..`). One origin means
+no CORS configuration and no API discovery for the browser to get wrong — which
+is what makes it work unchanged from a laptop, a container, or a hosted
+preview. Set `CORS_ORIGIN` only if you deliberately run the frontend from
+somewhere else.
 
 No database installation is required. With `DATABASE_URL` empty the server runs
 on [PGlite](https://pglite.dev) — a WASM build of Postgres that executes

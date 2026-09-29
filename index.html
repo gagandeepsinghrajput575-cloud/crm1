@@ -700,7 +700,7 @@ function connectApi(){
   return SYNC.connect(key.trim()).then(ok=>{
     if(ok){toast('Connected to API','Server-backed workspace.');return hydrateFromApi();}
     toast('Working offline','Changes stay in this browser.','warn');
-  });
+  }).catch(e=>{toast('API unreachable',e.message,'warn');syncBadge('offline','no server');startFootClock();});
 }
 function hydrateFromApi(){
   return SYNC.load().then(data=>{
@@ -734,7 +734,12 @@ function pushNote(l,text){if(SYNC&&l&&l.id&&!l.id.startsWith('id_'))SYNC.queueNo
 function renderAll(){renderQueue();renderConsole();renderDispo();renderKanban();renderHistory();updateSess();updateConn();}
 load();setMode(settings.mode||'callback');syncSettingsForm();renderAll();
 SYNC.connect().then(ok=>{
-  if(ok)return hydrateFromApi();
+  if(ok){
+    // The server is there but we have no credential, so the app would
+    // otherwise look connected while every request 401s. Ask once, up front.
+    if(!SYNC.api.getKey())return connectApi();
+    return hydrateFromApi();
+  }
   syncBadge('offline','no server');
   startFootClock();
 }).catch(()=>{syncBadge('offline','no server');startFootClock();});

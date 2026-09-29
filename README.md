@@ -23,21 +23,33 @@ works offline.
 ## Running it
 
 ```bash
-# 1. backend
 cd server
 cp .env.example .env
 node -e "console.log('df_' + require('crypto').randomBytes(32).toString('base64url'))"   # → API_KEY
 npm install && npm run db:generate && npm run seed && npm run dev
-
-# 2. UI, in another shell
-python3 -m http.server 5173      # or any static file server
 ```
 
-Open http://localhost:5173, then click the status line in the footer to paste
-your `API_KEY`. It is remembered in the browser.
+Then open **http://localhost:4000** — the API serves the UI from the same
+origin. On first load it asks for your `API_KEY` and remembers it in the
+browser.
 
-- API → http://localhost:4000
-- Swagger UI → http://localhost:4000/docs
+| URL | |
+| --- | --- |
+| `http://localhost:4000` | The app |
+| `http://localhost:4000/docs` | Swagger UI |
+| `http://localhost:4000/health` | Health |
+
+### Why one origin
+
+The UI is served by the API (`STATIC_DIR` in `.env`) rather than from a separate
+dev server. With the UI on a different origin, every request needs a correct
+CORS allow-list and the browser has to discover where the API lives — and both
+break the moment the app is reached from another machine, a tunnel, or a hosted
+preview. One origin removes the whole class of problem, and it matches how
+this actually deploys: one container, one URL.
+
+`CORS_ORIGIN` still exists for the case where you deliberately run a separate
+frontend (a Vite dev server, say) and only then does it matter.
 
 No database server needed: with `DATABASE_URL` empty the API runs on PGlite, a
 WASM build of PostgreSQL, using the same schema as production.

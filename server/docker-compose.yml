@@ -19,6 +19,7 @@ services:
   migrate:
     build:
       context: .
+      dockerfile: server/Dockerfile
       target: build
     command: npx prisma migrate deploy
     environment:
@@ -31,6 +32,7 @@ services:
   api:
     build:
       context: .
+      dockerfile: server/Dockerfile
       target: runtime
     restart: unless-stopped
     ports:
@@ -39,6 +41,7 @@ services:
       NODE_ENV: production
       PORT: 4000
       LOG_LEVEL: info
+      STATIC_DIR: /app/public
       DATABASE_URL: postgresql://dialflow:${POSTGRES_PASSWORD:-dialflow}@postgres:5432/dialflow?schema=public
       API_KEY: ${API_KEY:?set API_KEY in .env — generate with: node -e "console.log('df_'+require('crypto').randomBytes(32).toString('base64url'))"}
       TELEPHONY_PROVIDER: ${TELEPHONY_PROVIDER:-mock}

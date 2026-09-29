@@ -41,11 +41,10 @@ export const healthRoutes = fp(
       uptimeSec: Math.round((Date.now() - opts.startedAt) / 1000),
     }))
 
-    app.get('/', async () => ({
-      name: 'dialflow-api',
-      docs: config.DISABLE_DOCS ? null : '/docs',
-      health: '/health',
-    }))
+    // No `/` route here on purpose. When the static UI is being served it owns
+    // `/`, and an explicit route registered earlier would win over the static
+    // wildcard and shadow the whole app. src/app.ts registers a JSON `/`
+    // fallback instead, but only when there is no UI to serve.
   },
   { name: 'health-routes' },
 )

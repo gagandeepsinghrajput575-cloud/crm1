@@ -19,6 +19,9 @@ export default defineConfig({
       DISABLE_DOCS: 'true',
       LOG_LEVEL: 'silent',
       RATE_LIMIT_MAX: '100000',
+      // Enable CORS so the preflight path is actually exercised. The suite
+      // also asserts the disabled case explicitly.
+      CORS_ORIGIN: 'http://127.0.0.1:5173',
     },
   },
 })
