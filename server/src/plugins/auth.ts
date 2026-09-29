@@ -49,6 +49,12 @@ export const authPlugin = fp(
     let lastWrite = 0
 
     app.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      // CORS preflight carries no credentials by design — the browser sends
+      // OPTIONS without an Authorization header precisely to ask whether the
+      // real request would be allowed. Rejecting it here makes every
+      // cross-origin browser client fail with an opaque network error.
+      if (req.method === 'OPTIONS') return
+
       const path = req.url.split('?')[0] ?? ''
       if (PUBLIC_ROUTES.has(path)) return
       // Swagger assets are static and carry no data.

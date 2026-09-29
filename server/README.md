@@ -236,7 +236,7 @@ inline in `src/services/leads.ts`.
 | `npm run dev` | Watch mode |
 | `npm run build` | Compile to `dist/` |
 | `npm start` | Run the build |
-| `npm test` | Full suite (106 tests) |
+| `npm test` | Full suite (121 tests) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run seed` | Demo data (`-- --reset` to wipe first) |
 | `npm run db:generate` / `db:migrate` / `db:deploy` | Prisma |
@@ -252,6 +252,8 @@ npm test
 - **Integration** — the real HTTP layer, real schema, real SQL, real
   transactions, against a throwaway PGlite database. Only the carrier is
   substituted.
+- **Client** — the real `../js/api.js` and `../js/sync.js` sources, executed in
+  a `vm` with a browser shim, talking to a real server over real HTTP.
 
 The integration tests assert behaviour that matters rather than that code ran:
 that a duplicate webhook is a no-op, that a malformed cursor is a 422 and not a
@@ -326,14 +328,41 @@ that never starts.
 
 ---
 
+## The UI
+
+`../index.html` is wired to this API through `../js/api.js` and
+`../js/sync.js`.
+
+- **Discovery.** The client probes same-origin, then `localhost:4000`. If none
+  answer it stays on its `localStorage` cache and everything still works.
+- **Optimistic writes.** The UI mutates its own arrays and re-renders
+  immediately — dialling never waits on a network round-trip — and the sync
+  layer mirrors changes to the server in a debounced batch. Failures are
+  queued and retried rather than dropped.
+- **Id rekeying.** A new lead is created locally with an `id_` prefix, then
+  swapped for the server's UUID once the POST lands, so later edits hit the
+  right row instead of 404ing.
+- **Model translation.** The UI speaks `first`/`last`/`tz`/`value` (dollars)/
+  `lastCalled` (epoch); the API speaks `firstName`/`lastName`/`timezone`/
+  `valueCents`/`lastCalledAt` (ISO). All of it lives in `sync.js`.
+- **Auth is per-browser.** The footer status line prompts for the `API_KEY`
+  once and stores it in `localStorage`. That is a user credential, not a server
+  secret — Sonetel's client secret and access token never reach the browser at
+  all.
+- **CSV import** goes through the server when it is reachable, so it benefits
+  from the stricter RFC 4180 parser and per-row error reporting, and falls back
+  to the in-browser path when offline.
+
+`server/test/client-sync.test.ts` runs the *actual* client files in a `vm`
+context against a real server over real HTTP, so the mapping and rekeying logic
+is covered by the same suite as the API.
+
+---
+
 ## Not included
 
 Deliberately out of scope, and the things I would build next:
 
-- **Frontend wiring.** `../index.html` still reads and writes `localStorage`;
-  it does not call this API yet. The endpoints map onto its six views directly
-  (queue, pipeline, history, import, analytics, setup), and the stage ids match
-  the UI's `STAGES` array exactly.
 - **WebSockets.** `GET /api/calls/active` gives live state by polling; a socket
   would make the dialer console genuinely server-driven.
 - **Multi-tenancy.** Single tenant by design. Adding orgs later means adding a
@@ -343,3 +372,4 @@ Deliberately out of scope, and the things I would build next:
 - **Rate-limit correctness behind multiple instances.** `@fastify/rate-limit`
   is in-process. Two replicas means two buckets; use a Redis store before
   scaling out.
+- **Real Sonetel verification.** See the telephony section above.

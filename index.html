@@ -393,6 +393,8 @@ table.hist tr:hover td{background:var(--panel2)}
 
 <div id="toasts" class="fixed bottom-12 right-5 z-[100] flex flex-col gap-2"></div>
 
+<script src="js/api.js"></script>
+<script src="js/sync.js"></script>
 <script>
 /* ================= STATE ================= */
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -451,13 +453,13 @@ function renderLeadTabs(){const l=activeLead();if(!l)return;$('#tab-details').in
 $('#notesCount').textContent=l.notes.length;$('#notesList').innerHTML=l.notes.slice().reverse().map(n=>`<div class="p-3 rounded-xl text-[12.5px]" style="background:var(--panel2);border:1px solid var(--border)"><div class="text-[10.5px] font-bold mb-1" style="color:var(--muted)">${fmtTime(n.t)}</div>${n.text}</div>`).join('');
 $('#scriptBox').innerHTML=`Hey <b>${l.first}</b> — it's Alex from <b>Dialflow</b>. We help teams like <b>${l.company}</b> cut international call costs ~40% while dialing 3× faster with Sonetel. Got 27 seconds to hear how?`;
 $('#objCards').innerHTML=OBJECTIONS.map(o=>`<div class="p-3 rounded-xl" style="background:var(--panel2);border:1px solid var(--border)"><div class="font-bold text-[12.5px]">${o[0]}</div><div class="text-[12px] mt-0.5" style="color:var(--muted)">${o[1]}</div></div>`).join('');}
-function editLead(k,v){const l=activeLead();if(!l)return;if(k==='phone'){const s=sanitize(v);l.phone=s.e164;l.raw=v;if(!s.valid)toast('Invalid number','Check E.164 format.','err');}else l[k]=k==='value'?Number(v):v;save();renderConsole();renderQueue();renderKanban();}
+function editLead(k,v){const l=activeLead();if(!l)return;if(k==='phone'){const s=sanitize(v);l.phone=s.e164;l.raw=v;if(!s.valid)toast('Invalid number','Check E.164 format.','err');}else l[k]=k==='value'?Number(v):v;save();pushLead(l,false);renderConsole();renderQueue();renderKanban();}
 function leadTab(t,el){$$('#colRight .tab-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');['details','notes','script'].forEach(x=>$('#tab-'+x).classList.toggle('hidden',x!==t));}
-function saveNote(){const v=$('#noteBox').value.trim();if(!v)return;activeLead().notes.push({t:Date.now(),text:v});$('#noteBox').value='';save();renderLeadTabs();toast('Note saved','Attached to '+activeLead().name);}
+function saveNote(){const v=$('#noteBox').value.trim();if(!v)return;const l=activeLead();l.notes.push({t:Date.now(),text:v});$('#noteBox').value='';save();pushNote(l,v);renderLeadTabs();toast('Note saved','Attached to '+l.name);}
 $('#noteBox')?.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter')saveNote();});
 function copyScript(){navigator.clipboard.writeText($('#scriptBox').innerText);toast('Script copied','Paste it anywhere.');}
 function openAddLead(){$('#addModal').classList.remove('hidden');$('#addModal').classList.add('flex');}
-function addLead(){const f=$('#n_first').value||'New',la=$('#n_last').value||'Lead',ph=$('#n_phone').value;if(!ph){toast('Phone required','Add a phone number.','err');return;}const s=sanitize(ph);const l={id:uid(),first:f,last:la,name:f+' '+la,company:$('#n_company').value||'—',title:'—',phone:s.e164,raw:ph,email:$('#n_email').value||'',stage:'new',value:Number($('#n_value').value)||5000,tz:'PT',source:'Manual',score:75,lastCalled:null,notes:[]};leads.unshift(l);save();$('#addModal').classList.add('hidden');$('#addModal').classList.remove('flex');renderAll();toast('Lead added',l.name+' → New Leads');}
+function addLead(){const f=$('#n_first').value||'New',la=$('#n_last').value||'Lead',ph=$('#n_phone').value;if(!ph){toast('Phone required','Add a phone number.','err');return;}const s=sanitize(ph);const l={id:uid(),first:f,last:la,name:f+' '+la,company:$('#n_company').value||'—',title:'—',phone:s.e164,raw:ph,email:$('#n_email').value||'',stage:'new',value:Number($('#n_value').value)||5000,tz:'PT',source:'Manual',score:75,lastCalled:null,notes:[]};leads.unshift(l);save();pushLead(l,true);$('#addModal').classList.add('hidden');$('#addModal').classList.remove('flex');renderAll();toast('Lead added',l.name+' → New Leads');}
 
 /* ---- dispositions ---- */
 const DISPO_C={Connected:'#a78bfa','No Answer':'#64748b',Voicemail:'#f59e0b',Busy:'#f97316','Follow-Up':'#f472b6',Qualified:'#10b981',Won:'#22c55e',Lost:'#ef4444',DNC:'#18181b'};
@@ -481,7 +483,9 @@ function toggleCtrl(k){if(call.state!=='connected'&&call.state!=='ringing'){toas
 /* keypad */
 $('#dtmfGrid').innerHTML=['1','2','3','4','5','6','7','8','9','*','0','#'].map(k=>`<button class="ctrl-btn !w-full !h-11 !rounded-xl mono font-bold" onclick="dtmf('${k}')">${k}</button>`).join('');
 function dtmf(k){call.dtmf+=k;$('#dtmfShow').textContent=call.dtmf.split('').join(' ');beep(k==='#'?940:440+k.charCodeAt(0)*8,.08);addTl('DTMF sent: '+k,'done');}
-function hangUp(advance=false){if(!['dialing','ringing','connected'].includes(call.state)){toast('No active call','Nothing to hang up.','warn');return;}if(!call.dispo){toast('Pick a disposition first','Required for pipeline + history.','err');$('#dispoGrid').scrollIntoView({behavior:'smooth',block:'center'});return;}clearCallTimers();stopRing();const l=activeLead();const dur=call.elapsed<3&&call.state!=='connected'?8+Math.floor(Math.random()*20):call.elapsed;const rec={id:uid(),leadId:l.id,leadName:l.name,company:l.company,phone:l.phone,mode:settings.mode,disposition:call.dispo,duration:dur,time:Date.now(),note:($('#noteBox').value||'').trim()};calls.unshift(rec);if(rec.note){l.notes.push({t:Date.now(),text:'[Call '+fmtDur(dur)+'] '+rec.note});$('#noteBox').value='';}const map={'Connected':'connected','No Answer':'attempted',Voicemail:'attempted',Busy:'attempted','Follow-Up':'followup',Qualified:'qualified',Won:'won',Lost:'lost',DNC:'lost'};l.stage=map[call.dispo]||'attempted';l.lastCalled=Date.now();l.score=Math.max(10,l.score-4);save();addTl(`Hung up · ${fmtDur(dur)} · saved as “${call.dispo}” → moved to ${STAGES.find(s=>s.id===l.stage).label}`,'done');logApi('POST /api/calls — commit disposition',{call_id:rec.id,disposition:rec.disposition,duration_s:dur,next_stage:l.stage});call.state='idle';call.dispo=null;$('#callTimer').textContent='00:00';updateCallUI();$('#hangBtn').classList.add('opacity-40','pointer-events-none');$('#hangNextBtn').classList.add('opacity-40','pointer-events-none');$('#dialBtn').classList.remove('opacity-40','pointer-events-none');renderAll();toast('Logged ✓ '+l.name,`${call.dispo||rec.disposition} · ${fmtDur(dur)} · ${l.stage}`);updateSess();if(advance&&settings.autoAdvance){setTimeout(()=>{startDialNext();},(settings.delay||1.5)*1000);}}
+function hangUp(advance=false){if(!['dialing','ringing','connected'].includes(call.state)){toast('No active call','Nothing to hang up.','warn');return;}if(!call.dispo){toast('Pick a disposition first','Required for pipeline + history.','err');$('#dispoGrid').scrollIntoView({behavior:'smooth',block:'center'});return;}clearCallTimers();stopRing();const l=activeLead();const dur=call.elapsed<3&&call.state!=='connected'?8+Math.floor(Math.random()*20):call.elapsed;const rec={id:uid(),leadId:l.id,leadName:l.name,company:l.company,phone:l.phone,mode:settings.mode,disposition:call.dispo,duration:dur,time:Date.now(),note:($('#noteBox').value||'').trim()};calls.unshift(rec);if(rec.note){l.notes.push({t:Date.now(),text:'[Call '+fmtDur(dur)+'] '+rec.note});$('#noteBox').value='';}const map={'Connected':'connected','No Answer':'attempted',Voicemail:'attempted',Busy:'attempted','Follow-Up':'followup',Qualified:'qualified',Won:'won',Lost:'lost',DNC:'lost'};l.stage=map[call.dispo]||'attempted';l.lastCalled=Date.now();l.score=Math.max(10,l.score-4);save();pushLead(l,false);
+if(SYNC&&SYNC.state.online&&l.id&&!l.id.startsWith('id_')){SYNC.queueCall({leadId:l.id,mode:settings.mode,payload:{disposition:mapDispo(call.dispo),note:rec.note,durationSec:dur,stage:l.stage},onDone:fresh=>{if(!fresh)return;const i=calls.findIndex(c=>c.id===rec.id);if(i>-1)calls[i]=Object.assign(calls[i],{duration:fresh.durationSec,disposition:fresh.disposition||rec.disposition,status:fresh.status});renderHistory();updateSess();}});}
+addTl(`Hung up · ${fmtDur(dur)} · saved as “${call.dispo}” → moved to ${STAGES.find(s=>s.id===l.stage).label}`,'done');logApi('POST /api/calls — commit disposition',{call_id:rec.id,disposition:rec.disposition,duration_s:dur,next_stage:l.stage});call.state='idle';call.dispo=null;$('#callTimer').textContent='00:00';updateCallUI();$('#hangBtn').classList.add('opacity-40','pointer-events-none');$('#hangNextBtn').classList.add('opacity-40','pointer-events-none');$('#dialBtn').classList.remove('opacity-40','pointer-events-none');renderAll();toast('Logged ✓ '+l.name,`${call.dispo||rec.disposition} · ${fmtDur(dur)} · ${l.stage}`);updateSess();if(advance&&settings.autoAdvance){setTimeout(()=>{startDialNext();},(settings.delay||1.5)*1000);}}
 function updateSess(){const t=new Date();const today=calls.filter(c=>new Date(c.time).toDateString()===t.toDateString());const talk=today.reduce((a,c)=>a+c.duration,0);$('#sessStats').textContent=`${today.length} calls · ${fmtDur(talk)} talk`;$('#footSess').textContent=`today ${today.length} calls · ${fmtDur(talk)} · mode ${settings.mode}`;}
 /* audio blips */
 let AC=null;function beep(f,d=.1){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=f;o.type='sine';g.gain.value=.08;o.connect(g);g.connect(AC.destination);o.start();g.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+d);o.stop(AC.currentTime+d);}catch(e){}}
@@ -495,7 +499,7 @@ function copyApiLog(){navigator.clipboard.writeText($('#apiLog').textContent);to
 function renderKanban(){const s=($('#pipeSearch').value||'').toLowerCase();$('#pipeValue').textContent=money(leads.filter(l=>!['lost'].includes(l.stage)).reduce((a,l)=>a+ +l.value,0));const won=leads.filter(l=>l.stage==='won').length,closed=won+leads.filter(l=>l.stage==='lost').length;$('#pipeWin').textContent=(closed?Math.round(won/closed*100):0)+'%';$('#pipeCount').textContent=leads.length;
 $('#kanbanBoard').innerHTML=STAGES.map(st=>{const items=leads.filter(l=>l.stage===st.id&&(!s||(l.name+l.company+l.phone).toLowerCase().includes(s)));const val=items.reduce((a,l)=>a+ +l.value,0);return`<div class="kanban-col" data-stage="${st.id}"><div class="flex items-center gap-2 p-3.5" style="border-bottom:1px solid var(--border)"><span class="stage-dot" style="background:${st.color}"></span><span class="font-extrabold text-[13px]">${st.label}</span><span class="chip ml-auto">${items.length}</span></div><div class="text-[11px] mono font-bold px-3.5 pt-2" style="color:var(--muted)">${money(val)}</div><div class="flex-1 overflow-y-auto p-2.5 flex flex-col gap-2 dropzone-kanban" style="min-height:120px">${items.map(l=>`<div class="lead-card" draggable="true" data-id="${l.id}"><div class="flex items-center gap-2"><div class="avatar" style="width:30px;height:30px;font-size:11px;background:${grad(l.name)}">${initials(l.name)}</div><div class="min-w-0 flex-1"><div class="font-bold text-[13px] truncate">${l.name}</div><div class="text-[11px] truncate" style="color:var(--muted)">${l.company}</div></div><span class="mono text-[11px] font-bold">${money(l.value)}</span></div><div class="mono text-[11px] mt-2" style="color:var(--muted)">${l.phone}</div><div class="flex items-center gap-2 mt-2"><span class="chip">★ ${l.score}</span><span class="chip">${timeAgo(l.lastCalled)}</span><button onclick="loadLead('${l.id}');showView('dialer')" class="ml-auto text-[11px] font-extrabold px-2.5 py-1 rounded-lg" style="background:rgba(110,107,253,.15);color:var(--accent2)">Dial →</button></div></div>`).join('')||'<div class="text-center text-[11.5px] p-4 opacity-50">Drop cards here</div>'}</div></div>`;}).join('');
 $$('.lead-card').forEach(c=>{c.addEventListener('dragstart',()=>c.classList.add('dragging'));c.addEventListener('dragend',()=>c.classList.remove('dragging'));});
-$$('.kanban-col').forEach(col=>{col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('dragover');});col.addEventListener('dragleave',()=>col.classList.remove('dragover'));col.addEventListener('drop',e=>{e.preventDefault();col.classList.remove('dragover');const card=document.querySelector('.dragging');if(!card)return;const l=leads.find(x=>x.id===card.dataset.id);l.stage=col.dataset.stage;save();renderKanban();renderQueue();toast('Moved → '+STAGES.find(s=>s.id===l.stage).label,l.name);});});}
+$$('.kanban-col').forEach(col=>{col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('dragover');});col.addEventListener('dragleave',()=>col.classList.remove('dragover'));col.addEventListener('drop',e=>{e.preventDefault();col.classList.remove('dragover');const card=document.querySelector('.dragging');if(!card)return;const l=leads.find(x=>x.id===card.dataset.id);if(!l)return;l.stage=col.dataset.stage;save();pushLead(l,false);renderKanban();renderQueue();toast('Moved → '+STAGES.find(s=>s.id===l.stage).label,l.name);});});}
 
 /* ================= HISTORY ================= */
 function renderHistory(){const ds=[...new Set(calls.map(c=>c.disposition))];$('#histDispo').innerHTML='<option value="all">All outcomes</option>'+ds.map(d=>`<option>${d}</option>`).join('');const q=($('#histSearch').value||'').toLowerCase(),m=$('#histMode').value,d=$('#histDispo').value;const f=calls.filter(c=>(m==='all'||c.mode===m)&&(d==='all'||c.disposition===d)&&(!q||(c.leadName+c.phone+(c.note||'')).toLowerCase().includes(q)));
@@ -510,14 +514,25 @@ let staged=null,stagedMap={};
 const FIELDS=[['phone','Phone *'],['first','First name'],['last','Last name'],['email','Email'],['company','Company'],['title','Title'],['value','Deal value'],['stage','Stage'],['tz','Timezone'],['source','Source']];
 function parseCSV(t){const rows=[];let cur=[''],q=false;for(let i=0;i<t.length;i++){const c=t[i];if(c==='"'){if(q&&t[i+1]==='"'){cur[cur.length-1]+='"';i++;}else q=!q;}else if(c===','&&!q){cur.push('');}else if((c==='\n'||c==='\r')&&!q){if(cur.join('').trim())rows.push(cur);cur=[''];if(c==='\r'&&t[i+1]==='\n')i++;}else cur[cur.length-1]+=c;}if(cur.join('').trim())rows.push(cur);return rows;}
 function autoMap(head){const m={};FIELDS.forEach(([k])=>{m[k]='';});head.forEach((h,i)=>{const s=h.toLowerCase();if(/phone|mobile|tel|number|contact/.test(s)&&!m.phone)m.phone=i;else if(/first|fname|given/.test(s)&&!m.first)m.first=i;else if(/last|lname|surname|family/.test(s)&&!m.last)m.last=i;else if(/mail/.test(s)&&!m.email)m.email=i;else if(/compan|org|business|account/.test(s)&&!m.company)m.company=i;else if(/title|role|position|job/.test(s)&&!m.title)m.title=i;else if(/value|deal|amount|revenue/.test(s)&&!m.value)m.value=i;else if(/stage|status|pipeline/.test(s)&&!m.stage)m.stage=i;else if(/zone|^tz/.test(s)&&!m.tz)m.tz=i;else if(/source|lead_|campaign/.test(s)&&!m.source)m.source=i;else if(/name/.test(s)&&!m.first)m.first=i;});return m;}
-function handleFile(f){const r=new FileReader();r.onload=()=>{try{const rows=parseCSV(r.result);if(rows.length<2)throw 0;staged={head:rows[0].map(h=>h.trim()),rows:rows.slice(1)};stagedMap=autoMap(staged.head);renderImportPreview();toast('Parsed '+staged.rows.length+' rows','Review mapping, then import.');}catch(e){toast('Could not parse file','Use CSV with a header row.','err');}};r.readAsText(f);}
+function handleFile(f){const r=new FileReader();r.onload=()=>{try{const rows=parseCSV(r.result);if(rows.length<2)throw 0;staged={head:rows[0].map(h=>h.trim()),rows:rows.slice(1),raw:r.result};stagedMap=autoMap(staged.head);renderImportPreview();toast('Parsed '+staged.rows.length+' rows','Review mapping, then import.');}catch(e){toast('Could not parse file','Use CSV with a header row.','err');}};r.readAsText(f);}
 const dz=$('#dropzone');dz.onclick=()=>$('#fileIn').click();$('#fileIn').onchange=e=>e.target.files[0]&&handleFile(e.target.files[0]);['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('over')}));['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('over')}));dz.addEventListener('drop',e=>e.dataTransfer.files[0]&&handleFile(e.dataTransfer.files[0]));
 function renderImportPreview(){const{h}=staged;$('#mapGrid').innerHTML=FIELDS.map(([k,label])=>`<div><label>${label}</label><select data-map="${k}" onchange="stagedMap['${k}']=this.value===''? '' : +this.value;renderImportPreview()"><option value="">— ignore —</option>${staged.head.map((hh,i)=>`<option value="${i}" ${stagedMap[k]===i?'selected':''}>${hh}</option>`).join('')}</select></div>`).join('');
 $('#prevHead').innerHTML='<th>#</th>'+staged.head.map(h=>`<th>${h}</th>`).join('')+'<th>Sanitized</th>';
 $('#prevBody').innerHTML=staged.rows.slice(0,6).map((r,i)=>{const ph=stagedMap.phone===''?'':(r[stagedMap.phone]||'');const s=sanitize(ph);return`<tr><td class="mono opacity-50">${i+1}</td>${staged.head.map((_,j)=>`<td>${r[j]||''}</td>`).join('')}<td class="mono text-[11.5px] font-bold" style="color:${s.valid?'#10b981':'#ef4444'}">${s.e164||'—'} ${s.valid?'✓':'✕'}</td></tr>`;}).join('');
 const ok=staged.rows.filter(r=>sanitize(stagedMap.phone===''?'':(r[stagedMap.phone]||'')).valid).length;$('#importStats').innerHTML=[['Rows',staged.rows.length],['Valid #',ok],['Invalid',staged.rows.length-ok]].map(x=>`<div class="p-2.5 rounded-xl text-center" style="background:var(--panel2);border:1px solid var(--border)"><div class="text-[10px] font-bold" style="color:var(--muted)">${x[0]}</div><div class="mono font-extrabold">${x[1]}</div></div>`).join('');
 const b=$('#importBtn');if(stagedMap.phone===''||stagedMap.phone==null){b.classList.add('opacity-40','pointer-events-none');}else b.classList.remove('opacity-40','pointer-events-none');}
-function doImport(){if(!staged||stagedMap.phone==='')return;let add=0,skip=0;const seen=new Set(leads.map(l=>l.phone));staged.rows.forEach(r=>{const g=k=>stagedMap[k]===''||stagedMap[k]==null?'':(r[stagedMap[k]]||'').trim();const s=sanitize(g('phone'));if(!s.valid||seen.has(s.e164)){skip++;return;}const first=g('first')||'New',last=g('last')||'';leads.unshift({id:uid(),first,last,name:(first+' '+last).trim(),company:g('company')||'—',title:g('title')||'—',phone:s.e164,raw:g('phone'),email:g('email'),stage:['new','attempted','connected','followup','qualified','won','lost'].includes(g('stage').toLowerCase())?g('stage').toLowerCase():'new',value:Number(g('value').replace(/[^0-9.]/g,''))||5000,tz:g('tz')||'PT',source:g('source')||'CSV import',score:60+Math.floor(Math.random()*30),lastCalled:null,notes:[]});seen.add(s.e164);add++;});save();renderAll();toast(`Imported ${add} leads`,`${skip} skipped (invalid/duplicate).`);staged=null;$('#mapGrid').innerHTML='<div class="text-[13px] p-6 text-center col-span-2 rounded-xl" style="color:var(--muted);background:var(--panel2)">Done ✓ — drop another file anytime.</div>';$('#prevHead').innerHTML='';$('#prevBody').innerHTML='';showView('pipeline');}
+function doImport(){if(!staged||stagedMap.phone==='')return;
+  // Prefer the server: its RFC 4180 parser and E.164 validation are stricter
+  // than the browser's, and it reports per-row failures we can show verbatim.
+  if(SYNC&&SYNC.state.online&&staged.raw){return doImportRemote();}
+  return doImportLocal();}
+function doImportRemote(){
+  const fileName='import.csv';
+  return SYNC.api.importLeads(staged.raw,{filename:fileName,updateExisting:false})
+    .then(job=>{toast(`Imported ${job.imported} leads`,`${job.skipped} skipped by the server.`);finishImport();return hydrateFromApi();})
+    .catch(e=>{toast('Server import failed',e.message,'err');doImportLocal();});}
+function doImportLocal(){let add=0,skip=0;const seen=new Set(leads.map(l=>l.phone));staged.rows.forEach(r=>{const g=k=>stagedMap[k]===''||stagedMap[k]==null?'':(r[stagedMap[k]]||'').trim();const s=sanitize(g('phone'));if(!s.valid||seen.has(s.e164)){skip++;return;}const first=g('first')||'New',last=g('last')||'';leads.unshift({id:uid(),first,last,name:(first+' '+last).trim(),company:g('company')||'—',title:g('title')||'—',phone:s.e164,raw:g('phone'),email:g('email'),stage:['new','attempted','connected','followup','qualified','won','lost'].includes(g('stage').toLowerCase())?g('stage').toLowerCase():'new',value:Number(g('value').replace(/[^0-9.]/g,''))||5000,tz:g('tz')||'PT',source:g('source')||'CSV import',score:60+Math.floor(Math.random()*30),lastCalled:null,notes:[]});seen.add(s.e164);add++;});save();renderAll();toast(`Imported ${add} leads`,`${skip} skipped (invalid/duplicate).`);finishImport();}
+function finishImport(){staged=null;$('#mapGrid').innerHTML='<div class="text-[13px] p-6 text-center col-span-2 rounded-xl" style="color:var(--muted);background:var(--panel2)">Done ✓ — drop another file anytime.</div>';$('#prevHead').innerHTML='';$('#prevBody').innerHTML='';showView('pipeline');}
 function downloadSample(){dl('first_name,last_name,company,phone,email,deal_value,stage\nAva,Stone,Acme Inc,+1 415 555 0110,ava@acme.com,12000,new\nNoah,Kim,Globex,0044 7700 900456,noah@globex.uk,8500,followup\nMia,Rossi,Initech,(312) 555-0144,mia@initech.com,20000,new','sample-leads.csv','text/csv');}
 function pasteDemo(){handleFile(new File(['first_name,last_name,company,phone,email,deal_value\nElla,Hunt,Vertex,+1 646 555 0120,ella@vertex.co,18000\nOmar,Haddad,Cedrus,+46 8 555 0199,omar@cedrus.se,9400\nZoe,Adams,Nimbus,+1 415 555 0177,zoe@nimbus.io,22000'],'demo.csv'));}
 
@@ -534,7 +549,7 @@ const t=calls.reduce((a,c)=>a+c.duration,0);$('#anaKpis').innerHTML=[['Total tal
 function openSettings(){syncSettingsForm();$('#drawer').classList.add('open');$('#overlay').classList.add('show');}
 function closeSettings(){$('#drawer').classList.remove('open');$('#overlay').classList.remove('show');}
 function syncSettingsForm(){['clientId','clientSecret','username','password','agentPhone','sipUser','sipPass','sipDomain'].forEach(k=>{const el=$('#s_'+k);if(el)el.value=settings[k]||'';});$('#s_callerId').innerHTML=settings.callerIds.map(n=>`<option ${n===settings.callerId?'selected':''}>${n}</option>`).join('');$('#sw_advance').classList.toggle('on',settings.autoAdvance);$('#sw_rec').classList.toggle('on',settings.record);}
-function saveSettings(){['clientId','clientSecret','username','password','agentPhone','sipUser','sipPass','sipDomain'].forEach(k=>{settings[k]=$('#s_'+k).value.trim();});settings.callerId=$('#s_callerId').value;settings.autoAdvance=$('#sw_advance').classList.contains('on');settings.record=$('#sw_rec').classList.contains('on');settings.delay=parseFloat($('#s_delay').value)||1.5;call.rec=settings.record;save();setMode(settings.mode);updateConn();toast('Settings saved','Stored locally only.');}
+function saveSettings(){['clientId','clientSecret','username','password','agentPhone','sipUser','sipPass','sipDomain'].forEach(k=>{settings[k]=$('#s_'+k).value.trim();});settings.callerId=$('#s_callerId').value;settings.autoAdvance=$('#sw_advance').classList.contains('on');settings.record=$('#sw_rec').classList.contains('on');settings.delay=parseFloat($('#s_delay').value)||1.5;call.rec=settings.record;save();persistSettings();setMode(settings.mode);updateConn();toast('Settings saved',SYNC&&SYNC.state.online?'Synced to server.':'Stored in this browser only.');}
 async function testConnection(){const b=$('#testBtn');b.textContent='Authenticating…';b.classList.add('opacity-60');logApi('POST /api/token → https://api.sonetel.com/oauth/token',{grant_type:'password',client_id:settings.clientId||$('#s_clientId').value||'(missing)',username:$('#s_username').value||settings.username||'(missing)',scope:'call'});saveSettingsSilent();await new Promise(r=>setTimeout(r,1300));const ok=($('#s_clientId').value||settings.clientId)&&($('#s_username').value||settings.username);if(ok){settings.token='sn_'+Math.random().toString(36).slice(2)+'.'+Date.now().toString(36);settings.tokenExp=Date.now()+3600000;settings.callerIds=['+1 (415) 555-0100','+1 (212) 555-0147','+46 8 5055 6420','+44 20 3868 4712'];if(!settings.callerId)settings.callerId=settings.callerIds[0];save();$('#tokenBox').classList.remove('hidden');$('#tokenBox').textContent='✓ access_token '+settings.token.slice(0,26)+'… · expires in 59:59 · 4 caller IDs fetched';logApi('200 OK — token issued',{access_token:settings.token.slice(0,30)+'…',token_type:'Bearer',expires_in:3600,caller_ids:settings.callerIds});toast('Connected to Sonetel','Token cached · Caller IDs synced.');}else{toast('Missing credentials','Add Client ID + username first.','err');logApi('401 — missing credentials',{error:'invalid_client',hint:'Fill Client ID + username, or run backend proxy.'});}b.textContent='⇄ Authenticate & Fetch Caller IDs';b.classList.remove('opacity-60');syncSettingsForm();updateConn();}
 function saveSettingsSilent(){['clientId','clientSecret','username','password','agentPhone','sipUser','sipPass','sipDomain'].forEach(k=>{const el=$('#s_'+k);if(el&&el.value)settings[k]=el.value.trim();});save();}
 function updateConn(){const live=settings.token&&settings.tokenExp>Date.now();$('#connDot').style.background=live?'#22c55e':'#f59e0b';$('#connDot').style.color=live?'#22c55e':'#f59e0b';$('#connLabel').textContent=live?'Sonetel · Connected':'Setup required';$('#connSub').textContent=live?('Token valid · '+settings.callerId):'Add Sonetel credentials to go live.';}
@@ -655,10 +670,74 @@ $('#backendCode').textContent=BACKEND;
 function copyBackend(){navigator.clipboard.writeText(BACKEND);toast('Backend copied','Save as app.py, then run uvicorn.');}
 function downloadBackend(){dl(BACKEND,'app.py','text/x-python');}
 
+/* ================= API SYNC ================= */
+const SYNC=window.DialflowSync;
+/* The UI's disposition labels are human-readable; the API uses stable ids.
+   Anything unmapped is sent as null rather than a guess — the server rejects
+   unknown dispositions, and losing a label silently would be worse. */
+const DISPO_MAP={'Connected':'Connected','No Answer':'No_Answer','Voicemail':'Voicemail','Busy':'Busy','Follow-Up':'Follow_Up','Qualified':'Qualified','Won':'Sale','Lost':'Not_Interested','DNC':'Not_Interested'};
+function mapDispo(d){return DISPO_MAP[d]||null;}
+let footTimer=0;
+function syncBadge(kind,msg){
+  const el=$('#footApi'); if(!el)return;
+  clearInterval(footTimer);
+  el.style.color='';
+  if(kind==='online')el.textContent='api · connected · '+(SYNC.api.getKey()?'key set':'no key');
+  else if(kind==='offline')el.textContent='offline · local cache only';
+  else if(kind==='auth'){el.textContent='api · key rejected — click to set';el.style.color='#f59e0b';}
+  else if(kind==='error'){el.textContent='sync error · '+msg;el.style.color='#ef4444';}
+  else if(kind==='synced')el.textContent='api · synced';
+  else if(kind==='sync')el.textContent='api · syncing…';
+}
+function startFootClock(){
+  clearInterval(footTimer);
+  footTimer=setInterval(()=>{const el=$('#footApi');if(el)el.textContent=`api.sonetel.com · ${38+Math.floor(Math.random()*50)} ms · ${settings.mode.toUpperCase()}`;},4000);
+}
+function connectApi(){
+  const key=prompt('Dialflow API key\n\nPaste API_KEY from server/.env.\nLeave blank to stay on the local cache.',localStorage.getItem('dialflow_api_key')||'');
+  if(key===null)return;
+  if(key.trim())localStorage.setItem('dialflow_api_key',key.trim());else localStorage.removeItem('dialflow_api_key');
+  return SYNC.connect(key.trim()).then(ok=>{
+    if(ok){toast('Connected to API','Server-backed workspace.');return hydrateFromApi();}
+    toast('Working offline','Changes stay in this browser.','warn');
+  });
+}
+function hydrateFromApi(){
+  return SYNC.load().then(data=>{
+    if(data.leads.length){leads=data.leads;activeLeadId=null;}
+    if(data.calls.length)calls=data.calls;
+    // The list payload omits notes; fetch them for the leads actually shown.
+    return Promise.all(leads.slice(0,40).map(l=>SYNC.api.getLead(l.id).then(full=>{
+      if(full&&Array.isArray(full.notes))l.notes=full.notes.map(n=>({t:Date.parse(n.createdAt),text:n.text}));
+    }).catch(()=>{})));
+  }).then(()=>{save();renderAll();}).catch(e=>toast('Sync failed',e.message,'err'));
+}
+SYNC.setHooks({
+  findLead:id=>leads.find(l=>l.id===id),
+  rekey:(oldId,newId)=>{
+    leads.forEach(l=>{if(l.id===oldId)l.id=newId;});
+    calls.forEach(c=>{if(c.leadId===oldId)c.leadId=newId;});
+    if(activeLeadId===oldId)activeLeadId=newId;
+  }
+});
+SYNC.onStatus(syncBadge);
+document.addEventListener('click',e=>{if(e.target&&e.target.id==='footApi'&&!SYNC.state.online)connectApi();});
+function persistSettings(){
+  if(!SYNC||!SYNC.state.online)return;
+  SYNC.api.patchSettings({mode:settings.mode,autoAdvance:settings.autoAdvance,delaySec:settings.delay,record:settings.record,agentPhone:settings.agentPhone,callerId:settings.callerId,sipUser:settings.sipUser,sipDomain:settings.sipDomain}).catch(()=>{});
+}
+/* Push a local mutation to the server when one is reachable. */
+function pushLead(l,isNew){if(SYNC&&l)SYNC[isNew?'markCreated':'markDirty'](l);}
+function pushNote(l,text){if(SYNC&&l&&l.id&&!l.id.startsWith('id_'))SYNC.queueNote(l.id,text);}
+
 /* ================= BOOT ================= */
 function renderAll(){renderQueue();renderConsole();renderDispo();renderKanban();renderHistory();updateSess();updateConn();}
 load();setMode(settings.mode||'callback');syncSettingsForm();renderAll();
-setInterval(()=>{$('#footApi').textContent=`api.sonetel.com · ${38+Math.floor(Math.random()*50)} ms · ${settings.mode.toUpperCase()}`;},4000);
+SYNC.connect().then(ok=>{
+  if(ok)return hydrateFromApi();
+  syncBadge('offline','no server');
+  startFootClock();
+}).catch(()=>{syncBadge('offline','no server');startFootClock();});
 setTimeout(()=>toast('Welcome to Dialflow','Press N or hit Dial Next to start your session.'),600);
 </script>
 </body>

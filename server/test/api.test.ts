@@ -558,6 +558,37 @@ describe('api keys', () => {
   })
 })
 
+describe('cross-origin access', () => {
+  // The vitest env leaves CORS_ORIGIN empty, so `origin: false`. These tests
+  // pin the behaviour that matters regardless of the allow-list: a browser
+  // must be able to preflight, and Helmet must not veto the response.
+  it('answers a CORS preflight without requiring a key', async () => {
+    const res = await ctx.app.inject({
+      method: 'OPTIONS',
+      url: '/api/leads',
+      headers: {
+        origin: 'http://127.0.0.1:5173',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'authorization',
+      },
+    })
+    // Browsers never send credentials on a preflight, so a 401 here makes every
+    // cross-origin client fail with an opaque network error.
+    expect(res.statusCode).toBe(204)
+  })
+
+  it('does not set Cross-Origin-Resource-Policy to same-origin', async () => {
+    // Helmet defaults this to `same-origin`, which blocks a cross-origin
+    // fetch even when CORS is configured correctly.
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/leads',
+      headers: authHeader,
+    })
+    expect(res.headers['cross-origin-resource-policy']).not.toBe('same-origin')
+  })
+})
+
 describe('error handling', () => {
   it('returns a structured 404 for an unknown route', async () => {
     const res = await get('/api/nope')

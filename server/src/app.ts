@@ -77,6 +77,11 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
     // The API serves JSON, not HTML, so a strict CSP buys nothing here but
     // would break the Swagger UI.
     contentSecurityPolicy: false,
+    // Helmet defaults this to `same-origin`, which instructs the browser to
+    // block cross-origin fetches of our responses even when CORS allows them.
+    // For an API that a browser app on another origin calls, that silently
+    // defeats the whole CORS configuration.
+    crossOriginResourcePolicy: false,
   })
 
   await app.register(cors, {
