@@ -1,0 +1,268 @@
+// Dialflow — CRM + power-dialer data model
+// Dialer stage vocabulary is kept in lockstep with the frontend's STAGES array
+// in ../../index.html so pipeline columns line up exactly.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/client"
+  runtime  = "nodejs"
+}
+
+// Prisma 7 no longer accepts `url` here. The connection string is supplied
+// at runtime through a driver adapter (src/db.ts) and to the CLI through
+// prisma.config.ts.
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------- enums
+
+enum LeadStage {
+  new
+  attempted
+  connected
+  followup
+  qualified
+  won
+  lost
+}
+
+enum CallMode {
+  callback // PSTN: we ring the agent, then bridge the lead
+  voip // SIP/WebRTC: voice over the agent's headset
+}
+
+enum CallDirection {
+  outbound
+  inbound
+}
+
+enum CallStatus {
+  initiated
+  ringing
+  connected
+  completed
+  failed
+  no_answer
+  busy
+  rejected
+  voicemail
+  canceled
+}
+
+enum Disposition {
+  Connected
+  Voicemail
+  No_Answer
+  Busy
+  Wrong_Number
+  Not_Interested
+  Callback
+  Follow_Up
+  Qualified
+  Gatekeeper
+  Sale
+}
+
+enum ImportStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum TagColor {
+  blue
+  violet
+  emerald
+  amber
+  rose
+  slate
+}
+
+// ---------------------------------------------------------------- core entities
+
+model Lead {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  firstName String
+  lastName  String
+  company   String?
+  title     String?
+  email     String?
+
+  /// Normalised E.164 (e.g. +14155550141). Kept separate from `phoneRaw` so the
+  /// operator can still see exactly what they typed/imported.
+  phone     String
+  phoneRaw  String?
+  /// IANA-ish tz label the lead is reachable in (PT, CET, IST, ...)
+  timezone  String?
+
+  stage      LeadStage @default(new)
+  valueCents Int       @default(0)
+  score      Int       @default(50)
+  source     String?
+  lastCalled DateTime?
+
+  notes      LeadNote[]
+  calls      Call[]
+  tags       LeadTag[]
+  stageLog   StageChange[]
+
+  @@index([stage])
+  @@index([lastCalled])
+  @@index([score])
+  @@index([createdAt])
+  @@index([phone])
+  // Keeps the dialer queue query (open leads, highest score first) index-only.
+  @@index([stage, score(sort: Desc)])
+  @@map("leads")
+}
+
+model LeadNote {
+  id     String @id @default(uuid(7)) @db.Uuid
+  leadId String @db.Uuid
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([leadId, createdAt(sort: Desc)])
+  @@map("lead_notes")
+}
+
+model Tag {
+  id    String   @id @default(uuid(7)) @db.Uuid
+  name  String   @unique
+  color TagColor @default(violet)
+
+  leads LeadTag[]
+  @@map("tags")
+}
+
+model LeadTag {
+  leadId String @db.Uuid
+  tagId  String @db.Uuid
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([leadId, tagId])
+  @@index([tagId])
+  @@map("lead_tags")
+}
+
+model Call {
+  id     String @id @default(uuid(7)) @db.Uuid
+  leadId String @db.Uuid
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  mode       CallMode       @default(callback)
+  direction  CallDirection  @default(outbound)
+  status     CallStatus     @default(initiated)
+  disposition Disposition?
+
+  /// Identifier assigned by the telephony provider, used to reconcile webhooks.
+  providerCallId String?
+  /// SIP leg used for the agent in voip mode.
+  sipLeg         String?
+  recordingUrl   String?
+
+  durationSec Int       @default(0)
+  note        String?
+  startedAt   DateTime  @default(now())
+  answeredAt  DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime  @default(now())
+
+  events CallEvent[]
+
+  @@index([leadId, startedAt(sort: Desc)])
+  @@index([providerCallId])
+  @@index([status])
+  @@index([startedAt(sort: Desc)])
+  @@map("calls")
+}
+
+/// Append-only state transitions for one call. This is what lets the UI drive
+/// a live call console from server-pushed data rather than local animation.
+model CallEvent {
+  id     String @id @default(uuid(7)) @db.Uuid
+  callId String @db.Uuid
+  call   Call   @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  /// Normalised provider event name, e.g. `call.ringing`, `call.answered`.
+  type       String
+  payload    Json?
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([callId, occurredAt])
+  @@map("call_events")
+}
+
+/// Audit trail of pipeline movement — the kanban board can render real
+/// "moved 3 days ago" history instead of guessing.
+model StageChange {
+  id     String @id @default(uuid(7)) @db.Uuid
+  leadId String @db.Uuid
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  fromStage LeadStage?
+  toStage   LeadStage
+  createdAt DateTime     @default(now())
+
+  @@index([leadId, createdAt(sort: Desc)])
+  @@index([toStage, createdAt])
+  @@map("stage_changes")
+}
+
+// ---------------------------------------------------------------- ops entities
+
+/// Singleton-ish key/value store for dialer + telephony settings.
+/// Secrets are never stored here in plaintext — see src/modules/settings.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+/// Single-tenant auth. We store only a SHA-256 hash of the key, never the key
+/// itself, so a database leak does not hand over working credentials.
+model ApiKey {
+  id   String @id @default(uuid(7)) @db.Uuid
+  name String
+
+  keyHash String    @unique
+  prefix  String
+
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([prefix])
+  @@map("api_keys")
+}
+
+model ImportJob {
+  id  String @id @default(uuid(7)) @db.Uuid
+  filename String?
+  status   ImportStatus @default(pending)
+
+  totalRows   Int @default(0)
+  imported    Int @default(0)
+  updated     Int @default(0)
+  skipped     Int @default(0)
+  failed      Int @default(0)
+
+  /// Row-level failure detail, capped at 50 entries to bound row size.
+  errors Json?
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([createdAt(sort: Desc)])
+  @@map("import_jobs")
+}
