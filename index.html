@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dialflow — Sonetel Power Dialer & Pipeline for macOS</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090c; --bg2:#0b0d12; --panel:#10131a; --panel2:#141823; --sidebar:#0a0c11;
+  --border:rgba(255,255,255,.08); --border2:rgba(255,255,255,.12);
+  --text:#f2f4f8; --muted:#8b93a7; --muted2:#5d657a;
+  --accent:#6e6bfd; --accent2:#a78bfa; --green:#22c55e; --emerald:#10b981;
+  --amber:#f59e0b; --red:#ef4444; --blue:#38bdf8;
+  --glow:0 0 40px rgba(110,107,253,.35);
+  --radius:16px;
+}
+[data-theme="light"]{
+  --bg:#f4f5f7; --bg2:#eef0f4; --panel:#ffffff; --panel2:#f7f8fb; --sidebar:#ffffff;
+  --border:rgba(15,23,42,.08); --border2:rgba(15,23,42,.14);
+  --text:#0f172a; --muted:#64748b; --muted2:#94a3b8;
+  --glow:0 8px 30px rgba(110,107,253,.18);
+}
+*{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; -webkit-font-smoothing:antialiased}
+.mono{font-family:'JetBrains Mono',monospace}
+body{background:var(--bg); color:var(--text); transition:background .35s,color .35s; overflow:hidden}
+::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-thumb{background:rgba(139,147,167,.3);border-radius:99px} ::-webkit-scrollbar-track{background:transparent}
+.mac-bar{background:rgba(20,22,30,.85); backdrop-filter:blur(20px); border-bottom:1px solid var(--border)}
+[data-theme="light"] .mac-bar{background:rgba(255,255,255,.85)}
+.sidebar{background:var(--sidebar); border-right:1px solid var(--border)}
+.nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;color:var(--muted);font-weight:500;font-size:13.5px;cursor:pointer;border:1px solid transparent;transition:.2s;width:100%;text-align:left}
+.nav-item:hover{background:var(--panel2);color:var(--text)}
+.nav-item.active{background:linear-gradient(135deg,rgba(110,107,253,.18),rgba(167,139,250,.12));color:var(--text);border-color:rgba(110,107,253,.3)}
+.nav-item.active .nav-ico{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:var(--glow)}
+.nav-ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--panel2);border:1px solid var(--border);font-size:15px;transition:.2s}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);transition:.25s}
+.card-hover:hover{border-color:var(--border2);transform:translateY(-1px);box-shadow:0 12px 32px rgba(0,0,0,.25)}
+/* MODE TOGGLE - macOS segmented */
+.mode-toggle{position:relative;display:flex;background:var(--panel2);border:1px solid var(--border2);border-radius:999px;padding:4px;min-width:360px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 4px 16px rgba(0,0,0,.2)}
+.mode-thumb{position:absolute;top:4px;bottom:4px;border-radius:999px;transition:all .38s cubic-bezier(.32,.72,0,1);box-shadow:0 2px 12px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.2)}
+.mode-thumb.callback{left:4px;width:calc(50% - 4px);background:linear-gradient(135deg,#10b981,#059669)}
+.mode-thumb.voip{left:calc(50%);width:calc(50% - 4px);background:linear-gradient(135deg,#6e6bfd,#a78bfa);box-shadow:0 0 20px rgba(110,107,253,.5)}
+.mode-btn{position:relative;z-index:2;flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:9px 16px;border-radius:999px;font-size:13px;font-weight:700;letter-spacing:-.01em;color:var(--muted);transition:.25s;white-space:nowrap}
+.mode-btn.active{color:#fff}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;letter-spacing:.02em}
+.badge-cb{background:rgba(16,185,129,.14);color:#10b981;border:1px solid rgba(16,185,129,.3)}
+.badge-voip{background:rgba(110,107,253,.14);color:#a78bfa;border:1px solid rgba(110,107,253,.35)}
+[data-theme="light"] .badge-cb{color:#059669} [data-theme="light"] .badge-voip{color:#6d28d9}
+.pulse-dot{width:8px;height:8px;border-radius:99px;position:relative}
+.pulse-dot.live::after{content:'';position:absolute;inset:-4px;border-radius:99px;border:2px solid currentColor;opacity:.5;animation:ping 1.4s infinite}
+@keyframes ping{0%{transform:scale(.6);opacity:.8}100%{transform:scale(1.2);opacity:0}}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#8b5cf6);color:#fff;font-weight:700;border-radius:12px;padding:11px 20px;font-size:13.5px;transition:.2s;box-shadow:0 4px 20px rgba(110,107,253,.35),inset 0 1px 0 rgba(255,255,255,.2)}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(110,107,253,.5)}
+.btn-primary:active{transform:scale(.98)}
+.btn-ghost{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:10px 16px;font-weight:600;font-size:13px;transition:.2s;color:var(--text)}
+.btn-ghost:hover{border-color:var(--border2);background:var(--panel)}
+.btn-danger{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-weight:700;border-radius:12px;padding:11px 20px;font-size:13.5px;box-shadow:0 4px 20px rgba(239,68,68,.35)}
+.ctrl-btn{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;background:var(--panel2);border:1px solid var(--border);font-size:20px;transition:.2s;cursor:pointer}
+.ctrl-btn:hover{border-color:var(--border2);transform:translateY(-2px)}
+.ctrl-btn.on{background:rgba(110,107,253,.18);border-color:var(--accent);color:var(--accent2)}
+.ctrl-btn.danger-on{background:rgba(239,68,68,.15);border-color:var(--red);color:var(--red)}
+.dispo{padding:10px 8px;border-radius:12px;border:1px solid var(--border);background:var(--panel2);font-size:12px;font-weight:700;cursor:pointer;transition:.18s;text-align:center}
+.dispo:hover{transform:translateY(-2px);border-color:var(--accent)}
+.dispo.sel{border-color:var(--accent);background:rgba(110,107,253,.16);box-shadow:0 0 0 3px rgba(110,107,253,.15)}
+.kanban-col{background:var(--panel);border:1px solid var(--border);border-radius:18px;min-width:272px;max-width:272px;display:flex;flex-direction:column;max-height:100%}
+.lead-card{background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:13px;cursor:grab;transition:.2s}
+.lead-card:hover{border-color:rgba(110,107,253,.4);transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.25)}
+.lead-card:active{cursor:grabbing} .lead-card.dragging{opacity:.4;transform:scale(.97)}
+.kanban-col.dragover{border-color:var(--accent);background:rgba(110,107,253,.06)}
+.queue-row{display:flex;gap:12px;align-items:center;padding:11px 12px;border-radius:14px;border:1px solid transparent;cursor:pointer;transition:.18s}
+.queue-row:hover{background:var(--panel2);border-color:var(--border)}
+.queue-row.active{background:linear-gradient(135deg,rgba(110,107,253,.16),rgba(167,139,250,.08));border-color:rgba(110,107,253,.35)}
+.avatar{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-weight:800;font-size:14px;color:#fff;flex-shrink:0}
+.timeline-step{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;padding:7px 0}
+.t-dot{width:22px;height:22px;border-radius:99px;display:grid;place-items:center;font-size:11px;flex-shrink:0;border:1px solid var(--border);background:var(--panel2);color:var(--muted)}
+.t-dot.done{background:rgba(16,185,129,.15);border-color:rgba(16,185,129,.4);color:#10b981}
+.t-dot.busy{background:rgba(110,107,253,.15);border-color:var(--accent);color:var(--accent2);animation:spinPulse 1s infinite}
+@keyframes spinPulse{50%{transform:scale(1.12)}}
+.eq{display:flex;align-items:end;gap:3px;height:28px}
+.eq span{width:4px;border-radius:99px;background:linear-gradient(to top,var(--accent),var(--accent2));animation:eq 1s infinite ease-in-out}
+@keyframes eq{0%,100%{height:6px}50%{height:26px}}
+.eq.paused span{animation-play-state:paused;height:5px!important;opacity:.4}
+.ring-anim{position:relative}
+.ring-anim::before,.ring-anim::after{content:'';position:absolute;inset:-8px;border-radius:24px;border:2px solid var(--accent);opacity:0;animation:ring 2s infinite}
+.ring-anim::after{animation-delay:1s}
+@keyframes ring{0%{transform:scale(.92);opacity:.7}100%{transform:scale(1.08);opacity:0}}
+input,select,textarea{background:var(--panel2)!important;border:1px solid var(--border)!important;border-radius:11px!important;padding:10px 13px!important;font-size:13px!important;color:var(--text)!important;outline:none!important;width:100%;transition:.2s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(110,107,253,.15)!important}
+label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px;display:block}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:440px;max-width:94vw;background:var(--panel);border-left:1px solid var(--border);z-index:80;transform:translateX(105%);transition:transform .4s cubic-bezier(.32,.72,0,1);display:flex;flex-direction:column;box-shadow:-20px 0 60px rgba(0,0,0,.4)}
+.drawer.open{transform:none}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(3px);z-index:70;opacity:0;pointer-events:none;transition:.3s}
+.overlay.show{opacity:1;pointer-events:auto}
+.kbd{font-family:'JetBrains Mono';font-size:10.5px;background:var(--panel2);border:1px solid var(--border2);border-bottom-width:2px;border-radius:6px;padding:2px 6px;color:var(--muted)}
+.tab-btn{padding:8px 14px;border-radius:10px;font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer;transition:.2s}
+.tab-btn.active{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
+.toast{background:var(--panel);border:1px solid var(--border2);border-radius:14px;padding:13px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 12px 40px rgba(0,0,0,.4);animation:slideIn .35s cubic-bezier(.32,.72,0,1);max-width:360px}
+@keyframes slideIn{from{transform:translateX(30px);opacity:0}}
+.term{background:#0a0c12;border:1px solid rgba(255,255,255,.1);border-radius:14px;overflow:hidden}
+.term-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.02)}
+.dot{width:11px;height:11px;border-radius:99px}
+.code{font-family:'JetBrains Mono';font-size:12px;line-height:1.7;padding:16px;overflow-x:auto;color:#d6deeb;white-space:pre}
+.code .c{color:#5d657a}.code .k{color:#a78bfa}.code .s{color:#7dd3a8}.code .f{color:#7dd3fc}
+table.hist{width:100%;font-size:13px;border-collapse:collapse}
+table.hist th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel)}
+table.hist td{padding:12px;border-bottom:1px solid var(--border)}
+table.hist tr:hover td{background:var(--panel2)}
+.dropzone{border:2px dashed var(--border2);border-radius:20px;transition:.25s;cursor:pointer}
+.dropzone:hover,.dropzone.over{border-color:var(--accent);background:rgba(110,107,253,.06);transform:scale(1.005)}
+.view{animation:fadeUp .35s cubic-bezier(.32,.72,0,1)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}}
+.toggle-sw{width:44px;height:26px;border-radius:99px;background:var(--panel2);border:1px solid var(--border2);position:relative;cursor:pointer;transition:.25s;flex-shrink:0}
+.toggle-sw::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:99px;background:#8b93a7;transition:.25s}
+.toggle-sw.on{background:var(--accent)} .toggle-sw.on::after{left:20px;background:#fff}
+ numer, .big-timer{font-family:'JetBrains Mono';font-variant-numeric:tabular-nums}
+.chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--panel2);border:1px solid var(--border);color:var(--muted)}
+.stage-dot{width:8px;height:8px;border-radius:99px;flex-shrink:0}
+@media(max-width:1200px){.mode-toggle{min-width:280px} #colRight{display:none}}
+@media(max-width:900px){#sidebar{display:none} #colQueue{display:none}}
+</style>
+</head>
+<body>
+
+<!-- macOS menu bar -->
+<div class="mac-bar flex items-center justify-between px-4 h-7 text-[12px] select-none relative z-50">
+  <div class="flex items-center gap-4">
+    <span class="font-bold">◍</span>
+    <span class="font-bold hidden sm:inline">Dialflow</span>
+    <span class="opacity-60 hidden md:inline">File</span><span class="opacity-60 hidden md:inline">Edit</span><span class="opacity-60 hidden md:inline">View</span><span class="opacity-60 hidden md:inline">Window</span><span class="opacity-60 hidden md:inline">Help</span>
+  </div>
+  <div class="flex items-center gap-3 opacity-80">
+    <span id="menuMode" class="font-semibold">● Call Back</span>
+    <span class="hidden sm:inline">Wi-Fi</span><span class="hidden sm:inline">🔋 100%</span>
+    <span id="menuClock" class="mono font-semibold">Tue 09:41</span>
+  </div>
+</div>
+
+<div class="flex" style="height:calc(100vh - 28px)">
+<!-- ============ SIDEBAR ============ -->
+<aside id="sidebar" class="sidebar w-[264px] flex-shrink-0 flex flex-col p-4 gap-1 overflow-y-auto">
+  <div class="flex items-center gap-2 px-1 mb-3">
+    <div class="flex gap-1.5 mr-2"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+  </div>
+  <div class="flex items-center gap-3 px-2 mb-4">
+    <div class="w-10 h-10 rounded-2xl grid place-items-center text-white font-extrabold text-lg" style="background:linear-gradient(135deg,#6e6bfd,#a78bfa,#38bdf8);box-shadow:var(--glow)">◈</div>
+    <div><div class="font-extrabold text-[15px] tracking-tight">Dialflow</div><div class="text-[11px] font-semibold" style="color:var(--muted)">SONETEL · LOCAL <span class="chip ml-1" style="font-size:9px">v2.4</span></div></div>
+  </div>
+  <div class="text-[10.5px] font-bold tracking-[.1em] px-3 mb-1" style="color:var(--muted2)">WORKSPACE</div>
+  <button class="nav-item active" data-view="dialer"><span class="nav-ico">◉</span> Active Dialer <span class="ml-auto kbd">⌘1</span></button>
+  <button class="nav-item" data-view="pipeline"><span class="nav-ico">▦</span> Pipeline Board <span class="ml-auto kbd">⌘2</span></button>
+  <button class="nav-item" data-view="history"><span class="nav-ico">◷</span> Call History <span class="ml-auto kbd">⌘3</span></button>
+  <button class="nav-item" data-view="import"><span class="nav-ico">⇪</span> Import Leads <span class="ml-auto kbd">⌘4</span></button>
+  <button class="nav-item" data-view="analytics"><span class="nav-ico">◭</span> Analytics <span class="ml-auto kbd">⌘5</span></button>
+  <button class="nav-item" data-view="setup"><span class="nav-ico">⌘</span> Setup & API <span class="ml-auto kbd">⌘6</span></button>
+
+  <div class="flex items-center justify-between px-3 mt-5 mb-2">
+    <div class="text-[10.5px] font-bold tracking-[.1em]" style="color:var(--muted2)">DIAL QUEUE · <span id="queueCountMini">0</span></div>
+    <label class="flex items-center gap-2 text-[11px] font-semibold" style="color:var(--muted)"><div id="autoNextSw" class="toggle-sw on" style="width:34px;height:20px"></div>Auto</label>
+  </div>
+  <div id="miniQueue" class="flex flex-col gap-1 mb-3"></div>
+
+  <div class="mt-auto flex flex-col gap-2">
+    <div class="card p-3">
+      <div class="flex items-center gap-2 mb-1"><div id="connDot" class="pulse-dot live" style="background:#f59e0b;color:#f59e0b"></div><span id="connLabel" class="text-[12px] font-bold">Setup required</span><button onclick="openSettings()" class="ml-auto text-[11px] font-bold underline opacity-60 hover:opacity-100">Fix</button></div>
+      <div id="connSub" class="text-[11px]" style="color:var(--muted)">Add Sonetel credentials to go live.</div>
+      <div class="mt-2 flex gap-2"><div class="eq paused" id="miniEq"><span></span><span style="animation-delay:.15s"></span><span style="animation-delay:.3s"></span><span style="animation-delay:.45s"></span></div><span id="sessStats" class="text-[11px] mono" style="color:var(--muted)">0 calls · 00:00 talk</span></div>
+    </div>
+    <div class="flex items-center gap-3 p-2">
+      <div class="avatar" style="background:linear-gradient(135deg,#0ea5e9,#6366f1)">AR</div>
+      <div class="min-w-0"><div class="text-[13px] font-bold truncate">Alex Rivera</div><div class="text-[11px]" style="color:var(--muted)">Closer · SF · PT</div></div>
+      <button onclick="toggleTheme()" class="ml-auto ctrl-btn" style="width:34px;height:34px;font-size:15px" title="Toggle theme">◐</button>
+    </div>
+  </div>
+</aside>
+
+<!-- ============ MAIN ============ -->
+<main class="flex-1 flex flex-col min-w-0" style="background:var(--bg)">
+  <!-- Topbar -->
+  <header class="flex items-center gap-4 px-5 py-3 flex-shrink-0 flex-wrap" style="border-bottom:1px solid var(--border);background:var(--bg2)">
+    <div class="min-w-0">
+      <div class="flex items-center gap-2 text-[11px] font-semibold" style="color:var(--muted)"><span>Dialflow</span><span>/</span><span id="crumb" style="color:var(--text)">Active Dialer</span></div>
+      <h1 id="viewTitle" class="font-extrabold text-[19px] tracking-tight leading-tight">Power Dialer</h1>
+    </div>
+    <!-- THE TOGGLE -->
+    <div class="mx-auto flex flex-col items-center gap-1.5">
+      <div class="mode-toggle" id="modeToggle">
+        <div class="mode-thumb callback" id="modeThumb"></div>
+        <button class="mode-btn active" data-mode="callback" onclick="setMode('callback')"><span>↩</span> Call Back</button>
+        <button class="mode-btn" data-mode="voip" onclick="setMode('voip')"><span>◍</span> Internet (VoIP)</button>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="modeBadge" class="badge badge-cb"><span class="pulse-dot" style="background:currentColor"></span> CALL BACK ACTIVE</span>
+        <span id="modeSub" class="text-[11px] font-semibold mono" style="color:var(--muted)">fwd → +1 (415) 555-0132</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 ml-auto">
+      <button onclick="togglePalette(true)" class="btn-ghost hidden md:flex items-center gap-2 !py-2.5"><span class="opacity-60">⌕</span> Search leads… <span class="kbd">⌘K</span></button>
+      <button onclick="openSettings()" class="ctrl-btn" style="width:40px;height:40px;font-size:17px" title="Sonetel settings">⚙</button>
+      <button onclick="startDialNext()" class="btn-primary hidden sm:block">▷ Dial Next <span class="kbd ml-1 !bg-white/20 !text-white !border-white/20">N</span></button>
+    </div>
+  </header>
+
+  <div class="flex-1 overflow-y-auto p-5" id="scrollArea">
+  <!-- ===== DIALER VIEW ===== -->
+  <section id="view-dialer" class="view">
+    <div class="grid gap-4" style="grid-template-columns:300px minmax(0,1fr) 340px" id="dialerGrid">
+      <!-- Queue -->
+      <div id="colQueue" class="card p-3 flex flex-col" style="max-height:calc(100vh - 190px);min-height:560px">
+        <div class="flex items-center gap-2 mb-2 px-1"><span class="font-extrabold text-[13px]">Up Next</span><span id="queueCount" class="chip">0</span><button onclick="openAddLead()" class="ml-auto text-[12px] font-bold" style="color:var(--accent)">+ Add</button></div>
+        <input id="queueSearch" placeholder="Filter queue…" class="!py-2 !text-[12px] mb-2" oninput="renderQueue()">
+        <div class="flex gap-1.5 mb-2 px-1" id="queueFilters">
+          <button data-qf="all" class="chip !font-bold" style="background:rgba(110,107,253,.15);color:var(--accent2);border-color:rgba(110,107,253,.4)" onclick="setQueueFilter('all',this)">All</button>
+          <button data-qf="new" class="chip" onclick="setQueueFilter('new',this)">New</button>
+          <button data-qf="followup" class="chip" onclick="setQueueFilter('followup',this)">Follow-up</button>
+          <button data-qf="attempted" class="chip" onclick="setQueueFilter('attempted',this)">Retry</button>
+        </div>
+        <div id="queueList" class="flex-1 overflow-y-auto flex flex-col gap-1 pr-1"></div>
+        <div class="mt-2 p-2.5 rounded-xl text-[11.5px] leading-relaxed" style="background:var(--panel2);border:1px solid var(--border);color:var(--muted)"><b style="color:var(--text)">⚡ Power mode:</b> press <span class="kbd">N</span> dial · <span class="kbd">H</span> hang up · <span class="kbd">M</span> mute. Auto-advance is on.</div>
+      </div>
+      <!-- Console -->
+      <div class="card p-5 flex flex-col relative overflow-hidden" style="min-height:560px;max-height:calc(100vh - 190px);overflow-y:auto">
+        <div class="absolute -top-24 left-1/2 -translate-x-1/2 w-[500px] h-[220px] pointer-events-none" style="background:radial-gradient(ellipse,rgba(110,107,253,.22),transparent 70%)"></div>
+        <div class="flex items-center gap-4 relative">
+          <div id="heroAvatar" class="avatar ring-anim" style="width:64px;height:64px;font-size:20px;border-radius:20px;background:linear-gradient(135deg,#6e6bfd,#38bdf8)">—</div>
+          <div class="min-w-0 flex-1">
+            <div id="heroName" class="font-extrabold text-[19px] tracking-tight truncate">No lead loaded</div>
+            <div id="heroMeta" class="text-[12.5px] font-medium truncate" style="color:var(--muted)">Press Dial Next to load your highest-priority lead</div>
+            <div class="flex items-center gap-2 mt-1.5 flex-wrap"><span id="heroPhone" class="mono text-[12.5px] font-bold px-2.5 py-1 rounded-lg" style="background:var(--panel2);border:1px solid var(--border)">—</span><span id="heroSan" class="chip">E.164 ✓</span><span id="heroStage" class="chip">—</span></div>
+          </div>
+          <div class="text-right flex-shrink-0"><div class="text-[10px] font-bold tracking-widest" style="color:var(--muted2)">CALL DURATION</div><div id="callTimer" class="big-timer font-bold text-[38px] leading-none tracking-tight">00:00</div><div id="callStateLabel" class="badge badge-cb mt-1">IDLE</div></div>
+        </div>
+        <canvas id="wave" height="64" class="w-full mt-4 rounded-xl" style="background:var(--panel2);border:1px solid var(--border);height:64px"></canvas>
+        <div class="flex items-center justify-center gap-3 mt-4">
+          <button id="btnMute" class="ctrl-btn" onclick="toggleCtrl('mute')" title="Mute (M)">◌</button>
+          <button id="btnHold" class="ctrl-btn" onclick="toggleCtrl('hold')" title="Hold">⏸</button>
+          <button id="btnPad" class="ctrl-btn" onclick="document.getElementById('pad').classList.toggle('hidden')" title="Keypad">▦</button>
+          <button id="btnRec" class="ctrl-btn on" onclick="toggleCtrl('rec')" title="Record">●</button>
+          <button id="hangBtn" onclick="hangUp()" class="btn-danger !px-8 !py-3.5 opacity-40 pointer-events-none" >✕ Hang Up</button>
+          <button id="dialBtn" onclick="redial()" class="btn-primary !px-8 !py-3.5">☎ Dial</button>
+        </div>
+        <div id="pad" class="hidden mx-auto mt-3 p-3 rounded-2xl" style="background:var(--panel2);border:1px solid var(--border)">
+          <div id="dtmfShow" class="mono text-center font-bold mb-2 tracking-[.3em]" style="color:var(--muted)">—</div>
+          <div class="grid grid-cols-3 gap-2" id="dtmfGrid"></div>
+        </div>
+        <div class="grid md:grid-cols-2 gap-4 mt-4">
+          <div class="p-3.5 rounded-2xl" style="background:var(--panel2);border:1px solid var(--border)">
+            <div class="text-[11px] font-bold tracking-widest mb-2" style="color:var(--muted)">LIVE CALL TIMELINE</div>
+            <div id="callTimeline"><div class="text-[12.5px]" style="color:var(--muted)">Idle — dial to begin a Sonetel session.</div></div>
+          </div>
+          <div class="p-3.5 rounded-2xl" style="background:var(--panel2);border:1px solid var(--border)">
+            <div class="flex items-center justify-between mb-2"><span class="text-[11px] font-bold tracking-widest" style="color:var(--muted)">API INSPECTOR · SONETEL</span><button onclick="copyApiLog()" class="text-[11px] font-bold underline opacity-60">Copy</button></div>
+            <pre id="apiLog" class="mono text-[10.5px] leading-relaxed overflow-x-auto p-2.5 rounded-lg" style="background:rgba(0,0,0,.3);border:1px solid var(--border);max-height:170px;overflow-y:auto;color:#9fb3c8">No requests yet. Dial to see the live OAuth + call payload routed via FastAPI → https://api.sonetel.com</pre>
+          </div>
+        </div>
+        <div class="mt-4">
+          <div class="flex items-center justify-between mb-2"><span class="text-[11px] font-bold tracking-widest" style="color:var(--muted)">QUICK DISPOSITION <span class="opacity-60">— required before hang up</span></span><span id="dispoHint" class="text-[11px] font-bold" style="color:var(--amber)">● pick one</span></div>
+          <div class="grid grid-cols-3 sm:grid-cols-5 gap-2" id="dispoGrid"></div>
+        </div>
+        <button id="hangNextBtn" onclick="hangUp(true)" class="btn-primary w-full mt-4 !py-3.5 !text-[14px] opacity-40 pointer-events-none">✓ Hang Up & Move to Next →</button>
+      </div>
+      <!-- Lead detail -->
+      <div id="colRight" class="card p-4 flex flex-col" style="max-height:calc(100vh - 190px);min-height:560px;overflow-y:auto">
+        <div class="flex gap-1 mb-3 p-1 rounded-xl" style="background:var(--panel2)"><button class="tab-btn active flex-1" onclick="leadTab('details',this)">Details</button><button class="tab-btn flex-1" onclick="leadTab('notes',this)">Notes <span id="notesCount">0</span></button><button class="tab-btn flex-1" onclick="leadTab('script',this)">Script</button></div>
+        <div id="tab-details"></div>
+        <div id="tab-notes" class="hidden"><div id="notesList" class="flex flex-col gap-2 mb-3"></div><textarea id="noteBox" rows="3" placeholder="Type a call note… (⌘+Enter to save)"></textarea><button onclick="saveNote()" class="btn-primary w-full mt-2 !py-2.5">+ Save Note</button></div>
+        <div id="tab-script" class="hidden"><div class="p-3.5 rounded-xl text-[13px] leading-relaxed" style="background:var(--panel2);border:1px solid var(--border)" id="scriptBox"></div><button onclick="copyScript()" class="btn-ghost w-full mt-2">⧉ Copy script</button><div class="mt-3 text-[11px] font-bold tracking-widest" style="color:var(--muted)">OBJECTION CARDS</div><div class="flex flex-col gap-2 mt-2" id="objCards"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== PIPELINE ===== -->
+  <section id="view-pipeline" class="view hidden">
+    <div class="flex items-center gap-3 mb-4 flex-wrap">
+      <div class="card px-4 py-3 flex items-center gap-3"><span class="text-[11px] font-bold" style="color:var(--muted)">PIPELINE VALUE</span><span id="pipeValue" class="mono font-extrabold text-[18px]">$0</span></div>
+      <div class="card px-4 py-3 flex items-center gap-3"><span class="text-[11px] font-bold" style="color:var(--muted)">WIN RATE</span><span id="pipeWin" class="mono font-extrabold text-[18px]">0%</span></div>
+      <div class="card px-4 py-3 flex items-center gap-3"><span class="text-[11px] font-bold" style="color:var(--muted)">LEADS</span><span id="pipeCount" class="mono font-extrabold text-[18px]">0</span></div>
+      <input id="pipeSearch" placeholder="Search pipeline…" class="!w-56 ml-auto" oninput="renderKanban()">
+      <button onclick="openAddLead()" class="btn-primary">+ New Lead</button>
+    </div>
+    <div id="kanbanBoard" class="flex gap-3 overflow-x-auto pb-4" style="max-height:calc(100vh - 260px);min-height:520px"></div>
+  </section>
+
+  <!-- ===== HISTORY ===== -->
+  <section id="view-history" class="view hidden">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" id="histKpis"></div>
+    <div class="card p-4">
+      <div class="flex items-center gap-2 mb-3 flex-wrap">
+        <span class="font-extrabold">Call History</span><span id="histCount" class="chip">0</span>
+        <input id="histSearch" placeholder="Search…" class="!w-48 !py-2" oninput="renderHistory()">
+        <select id="histMode" class="!w-40 !py-2" onchange="renderHistory()"><option value="all">All modes</option><option value="callback">Call Back</option><option value="voip">VoIP</option></select>
+        <select id="histDispo" class="!w-44 !py-2" onchange="renderHistory()"><option value="all">All outcomes</option></select>
+        <button onclick="exportHistory()" class="btn-ghost !py-2 ml-auto">⇩ Export CSV</button>
+        <button onclick="clearHistory()" class="btn-ghost !py-2">Clear</button>
+      </div>
+      <div class="overflow-auto" style="max-height:calc(100vh - 380px)"><table class="hist"><thead><tr><th>Time</th><th>Lead</th><th>Mode</th><th>Duration</th><th>Disposition</th><th>Note</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ===== IMPORT ===== -->
+  <section id="view-import" class="view hidden">
+    <div class="grid lg:grid-cols-5 gap-4">
+      <div class="lg:col-span-2 flex flex-col gap-4">
+        <div id="dropzone" class="dropzone card p-10 text-center">
+          <div class="text-4xl mb-3">⇪</div><div class="font-extrabold text-[16px]">Drag & drop CSV / Excel</div><div class="text-[13px] mt-1" style="color:var(--muted)">or <span class="underline font-bold" style="color:var(--accent2)">browse files</span> · smart mapping + E.164 sanitization</div>
+          <input type="file" id="fileIn" accept=".csv,.txt,.xls,.xlsx" class="hidden">
+          <div class="flex justify-center gap-2 mt-4"><button onclick="downloadSample()" class="btn-ghost !py-2 !text-[12px]">⇩ Sample CSV</button><button onclick="pasteDemo()" class="btn-ghost !py-2 !text-[12px]">✦ Load demo rows</button></div>
+        </div>
+        <div class="card p-4"><div class="font-bold text-[13px] mb-2">Sanitization engine</div><div class="text-[12.5px] leading-relaxed" style="color:var(--muted)">Strips <span class="mono">() - . spaces</span>, converts <span class="mono">00 → +</span>, assumes <span class="mono">+1</span> for 10-digit NANP, validates length 7–15, flags invalid rows. Duplicates are merged on phone.</div><div id="importStats" class="grid grid-cols-3 gap-2 mt-3"></div></div>
+      </div>
+      <div class="lg:col-span-3 card p-5">
+        <div class="flex items-center gap-2 mb-3"><span class="font-extrabold">Column Mapping</span><span class="chip">auto-detected</span><button id="importBtn" onclick="doImport()" class="btn-primary ml-auto !py-2.5 opacity-40 pointer-events-none">Import → Pipeline</button></div>
+        <div id="mapGrid" class="grid sm:grid-cols-2 gap-3 mb-4"><div class="text-[13px] p-6 text-center col-span-2 rounded-xl" style="color:var(--muted);background:var(--panel2);border:1px solid var(--border)">Upload a file to preview smart column mapping…</div></div>
+        <div class="text-[11px] font-bold tracking-widest mb-2" style="color:var(--muted)">PREVIEW · FIRST 6 ROWS</div>
+        <div class="overflow-auto rounded-xl" style="border:1px solid var(--border);max-height:340px"><table class="hist"><thead><tr id="prevHead"></tr></thead><tbody id="prevBody"></tbody></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ANALYTICS ===== -->
+  <section id="view-analytics" class="view hidden">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" id="anaKpis"></div>
+    <div class="grid lg:grid-cols-3 gap-4">
+      <div class="card p-4 lg:col-span-2"><div class="font-bold text-[13px] mb-2">Calls per day · last 7 days</div><canvas id="chCalls" height="120"></canvas></div>
+      <div class="card p-4"><div class="font-bold text-[13px] mb-2">Outcome mix</div><canvas id="chDispo" height="180"></canvas></div>
+      <div class="card p-4"><div class="font-bold text-[13px] mb-2">Pipeline funnel</div><canvas id="chFunnel" height="180"></canvas></div>
+      <div class="card p-4 lg:col-span-2"><div class="font-bold text-[13px] mb-2">Talk time (min) per day</div><canvas id="chTalk" height="120"></canvas></div>
+    </div>
+  </section>
+
+  <!-- ===== SETUP ===== -->
+  <section id="view-setup" class="view hidden">
+    <div class="grid lg:grid-cols-2 gap-4">
+      <div class="flex flex-col gap-4">
+        <div class="card p-5"><div class="font-extrabold text-[16px]">Run locally on macOS · 5 minutes</div><div class="text-[13px] mt-1" style="color:var(--muted)">This UI is the frontend. Pair it with the bundled FastAPI backend for real SQLite persistence (<span class="mono">pipeline.db</span>) and Sonetel OAuth proxying (avoids CORS).</div>
+          <div class="flex flex-col gap-3 mt-4" id="setupSteps"></div>
+        </div>
+        <div class="card p-5"><div class="font-bold text-[13px] mb-2">Architecture</div><div class="flex items-center gap-2 text-[12px] font-bold flex-wrap"><span class="px-3 py-2 rounded-xl" style="background:rgba(110,107,253,.15);border:1px solid rgba(110,107,253,.4)">◈ This UI :3000</span><span>→</span><span class="px-3 py-2 rounded-xl" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.4)">FastAPI :8000 + pipeline.db</span><span>→</span><span class="px-3 py-2 rounded-xl" style="background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.4)">Sonetel Cloud</span></div>
+        <table class="hist mt-3"><thead><tr><th>Endpoint</th><th>Method</th></tr></thead><tbody class="mono text-[11.5px]"><tr><td>https://api.sonetel.com/oauth/token</td><td>OAuth2 token</td></tr><tr><td>POST /api/call/callback {from, to, caller_id}</td><td>Call Back leg</td></tr><tr><td>POST /api/call/sip {to, caller_id, webrtc}</td><td>VoIP leg</td></tr><tr><td>GET/POST /api/leads · /api/calls · /api/notes</td><td>SQLite CRUD</td></tr></tbody></table></div>
+      </div>
+      <div class="card p-0 overflow-hidden flex flex-col">
+        <div class="flex items-center gap-2 px-5 py-4" style="border-bottom:1px solid var(--border)"><span class="font-extrabold">backend · app.py</span><span class="chip">FastAPI + SQLite</span><button onclick="copyBackend()" class="btn-ghost !py-1.5 !px-3 ml-auto !text-[12px]">⧉ Copy</button><button onclick="downloadBackend()" class="btn-primary !py-1.5 !px-3 !text-[12px]">⇩ app.py</button></div>
+        <div class="overflow-auto" style="max-height:calc(100vh - 260px)"><pre class="code" id="backendCode"></pre></div>
+      </div>
+    </div>
+  </section>
+  </div>
+
+  <!-- status bar -->
+  <footer class="flex items-center gap-4 px-5 py-2 text-[11.5px] font-medium flex-shrink-0" style="border-top:1px solid var(--border);background:var(--bg2);color:var(--muted)">
+    <span class="flex items-center gap-1.5"><span class="pulse-dot" style="background:#22c55e"></span> <span class="mono">~/dialflow/pipeline.db · SQLite ✓</span></span>
+    <span class="hidden md:inline mono" id="footApi">api.sonetel.com · — ms</span>
+    <span class="hidden md:inline"><span class="kbd">N</span> dial · <span class="kbd">H</span> hangup · <span class="kbd">M</span> mute · <span class="kbd">⌘K</span> search</span>
+    <span class="ml-auto mono" id="footSess">ready</span>
+  </footer>
+</main>
+</div>
+
+<!-- Settings drawer -->
+<div class="overlay" id="overlay" onclick="closeSettings()"></div>
+<aside class="drawer" id="drawer">
+  <div class="flex items-center gap-3 p-5" style="border-bottom:1px solid var(--border)"><div class="font-extrabold text-[16px]">Sonetel Settings</div><span class="chip">local only · never uploaded</span><button onclick="closeSettings()" class="ml-auto ctrl-btn" style="width:32px;height:32px">✕</button></div>
+  <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
+    <div><div class="font-bold text-[13px] mb-2">① Sonetel OAuth2 account</div><div class="grid grid-cols-2 gap-2.5"><div><label>Client ID</label><input id="s_clientId" placeholder="ACME-APP-123"></div><div><label>Client Secret</label><input id="s_clientSecret" type="password" placeholder="••••••••"></div><div><label>Username (Sonetel email)</label><input id="s_username" placeholder="you@company.com"></div><div><label>Password</label><input id="s_password" type="password" placeholder="••••••••"></div></div><button onclick="testConnection()" id="testBtn" class="btn-primary w-full mt-3">⇄ Authenticate & Fetch Caller IDs</button><div id="tokenBox" class="mono text-[11px] mt-2 p-2.5 rounded-lg hidden" style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);color:#10b981"></div></div>
+    <div><div class="font-bold text-[13px] mb-2">② Calling method defaults</div><div class="grid gap-2.5"><div><label>Agent phone — Call Back forwarding number</label><input id="s_agentPhone" placeholder="+1 415 555 0132"></div><div><label>Default Caller ID (your Sonetel numbers)</label><select id="s_callerId"></select></div><div class="grid grid-cols-2 gap-2.5"><div><label>SIP username (VoIP)</label><input id="s_sipUser" placeholder="sip-user"></div><div><label>SIP password</label><input id="s_sipPass" type="password" placeholder="••••"></div></div><div><label>SIP domain</label><input id="s_sipDomain" placeholder="sip.sonetel.com"></div></div></div>
+    <div><div class="font-bold text-[13px] mb-2">③ Dialer behaviour</div><div class="flex flex-col gap-2.5 text-[13px] font-medium">
+      <label class="flex items-center gap-3 !mb-0 !normal-case !tracking-normal !text-[13px]" style="color:var(--text)"><div class="toggle-sw on" id="sw_advance" onclick="this.classList.toggle('on');saveSettings()"></div> Auto-advance to next lead after hang up</label>
+      <label class="flex items-center gap-3 !mb-0 !normal-case !tracking-normal !text-[13px]" style="color:var(--text)"><div class="toggle-sw on" id="sw_rec" onclick="this.classList.toggle('on');saveSettings()"></div> Auto-record calls</label>
+      <div><label>Auto-advance delay (sec)</label><input id="s_delay" type="number" value="1.5" min="0" max="10" step="0.5"></div>
+      <div><label>Audio output (headset)</label><select id="s_audio"><option>MacBook Pro Speakers</option><option>AirPods Pro</option><option>Jabra Evolve2 65</option><option>USB Headset H340</option></select></div>
+    </div></div>
+    <button onclick="resetDemo()" class="btn-ghost">↺ Reset demo data</button>
+  </div>
+  <div class="p-4 flex gap-2" style="border-top:1px solid var(--border)"><button onclick="closeSettings()" class="btn-ghost flex-1">Close</button><button onclick="saveSettings();closeSettings()" class="btn-primary flex-1">Save Settings ✓</button></div>
+</aside>
+
+<!-- Command palette -->
+<div id="palette" class="fixed inset-0 z-[90] hidden items-start justify-center pt-[12vh]" style="background:rgba(0,0,0,.55);backdrop-filter:blur(6px)" onclick="if(event.target===this)togglePalette(false)">
+  <div class="card w-[560px] max-w-[92vw] overflow-hidden" style="box-shadow:0 30px 80px rgba(0,0,0,.5)">
+    <div class="flex items-center gap-3 px-4 py-3" style="border-bottom:1px solid var(--border)"><span>⌕</span><input id="palIn" placeholder="Type a lead, action, or view…" class="!border-0 !bg-transparent !text-[15px]" style="box-shadow:none!important" oninput="renderPalette()"><span class="kbd">esc</span></div>
+    <div id="palList" class="max-h-[340px] overflow-y-auto p-2"></div>
+  </div>
+</div>
+
+<!-- Add lead modal -->
+<div id="addModal" class="fixed inset-0 z-[90] hidden items-center justify-center p-4" style="background:rgba(0,0,0,.55);backdrop-filter:blur(6px)" onclick="if(event.target===this)this.classList.add('hidden');this.classList.remove('flex')">
+  <div class="card p-6 w-[480px] max-w-[94vw]"><div class="font-extrabold text-[17px] mb-1">New lead</div><div class="text-[12.5px] mb-4" style="color:var(--muted)">Number is auto-sanitized to E.164 on save.</div>
+  <div class="grid grid-cols-2 gap-2.5"><div><label>First name</label><input id="n_first" placeholder="Ada"></div><div><label>Last name</label><input id="n_last" placeholder="Lovelace"></div><div><label>Company</label><input id="n_company" placeholder="Acme Inc"></div><div><label>Phone *</label><input id="n_phone" placeholder="+1 415 555 0100"></div><div><label>Email</label><input id="n_email" placeholder="ada@acme.com"></div><div><label>Deal value $</label><input id="n_value" type="number" placeholder="12000"></div></div>
+  <div class="flex gap-2 mt-4"><button onclick="document.getElementById('addModal').classList.add('hidden')" class="btn-ghost flex-1">Cancel</button><button onclick="addLead()" class="btn-primary flex-1">Add to Pipeline ✓</button></div></div>
+</div>
+
+<div id="toasts" class="fixed bottom-12 right-5 z-[100] flex flex-col gap-2"></div>
+
+<script>
+/* ================= STATE ================= */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const uid=()=> 'id_'+Math.random().toString(36).slice(2,9);
+const STAGES=[{id:'new',label:'New Leads',color:'#38bdf8'},{id:'attempted',label:'Attempted',color:'#f59e0b'},{id:'connected',label:'Connected',color:'#a78bfa'},{id:'followup',label:'Follow-Up',color:'#f472b6'},{id:'qualified',label:'Qualified',color:'#10b981'},{id:'won',label:'Closed Won',color:'#22c55e'},{id:'lost',label:'Closed Lost',color:'#ef4444'}];
+const DISPOS=['Connected','No Answer','Voicemail','Busy','Follow-Up','Qualified','Won','Lost','DNC'];
+const OBJECTIONS=[['“Too expensive”','Totally fair — most teams say that before seeing the 3.2× reply lift. If I could show it pays for itself in 30 days, worth 15 min?'],['“Send me an email”','Happy to — so I send the right one-pager, what matters most: cost, onboarding, or call quality?'],['“We already use X”','Great — we integrate alongside X and most teams keep it. What would make you switch if anything?']];
+let leads=[], calls=[], settings=null, activeLeadId=null, queueFilter='all';
+let call={state:'idle',dispo:null,elapsed:0,timerInt:null,timeouts:[],muted:false,hold:false,rec:true,dtmf:''};
+const GRADS=[['#6e6bfd','#38bdf8'],['#f59e0b','#ef4444'],['#10b981','#0ea5e9'],['#ec4899','#8b5cf6'],['#0ea5e9','#22c55e'],['#f97316','#eab308']];
+
+function defaultSettings(){return{mode:'callback',clientId:'',clientSecret:'',username:'',password:'',agentPhone:'+1 (415) 555-0132',callerId:'+1 (415) 555-0100',callerIds:['+1 (415) 555-0100','+1 (212) 555-0147','+46 8 5055 6420'],sipUser:'sales-desk-01',sipPass:'',sipDomain:'sip.sonetel.com',autoAdvance:true,delay:1.5,record:true,token:'',tokenExp:0};}
+function seed(){
+  const D=[['Maya','Chen','Northwind','VP Sales','+1 (415) 555-0141','maya@northwind.io','new',24000,'PT','Website'],['Jonas','Weber','Helios Energy','Founder','+49 170 555 0182','jonas@helios.de','new',18000,'CET','Outbound'],['Priya','Nair','Finch & Co','Head of Ops','+91 98200 44510','priya@finch.co','attempted',9500,'IST','Referral'],['Tom','Okafor','Brightline','CEO','+1 (212) 555-0173','tom@brightline.co','followup',32000,'ET','Cold call'],['Sofia','Marsh','Lumen Labs','Growth Lead','+44 7700 900123','sofia@lumenlabs.uk','new',14000,'GMT','LinkedIn'],['Diego','Fuentes','Andes Retail','Director','+52 55 1234 8890','diego@andes.mx','attempted',7200,'CST','CSV import'],['Aiko','Tanaka','Kanso Steel','Procurement','+81 90 1234 5678','aiko@kanso.jp','connected',41000,'JST','Partner'],['Liam','Murphy','Harbour Freight','Owner','+353 85 123 4567','liam@harbour.ie','new',6800,'GMT','Website'],['Ingrid','Larsen','Fjord Tech','CTO','+47 900 12 345','ingrid@fjord.no','qualified',27500,'CET','Demo'],['Carlos','Mendez','Solvivo','Sales Mgr','+34 612 345 678','carlos@solvivo.es','followup',11200,'CET','Outbound'],['Emma','Wilson','Copperfield','COO','+1 (312) 555-0198','emma@copperfield.com','new',15900,'CT','Referral'],['Ravi','Patel','Zephyr Air','Founder','+91 99301 22334','ravi@zephyr.in','attempted',21000,'IST','Cold call']];
+  leads=D.map((d,i)=>({id:uid()+i,first:d[0],last:d[1],name:d[0]+' '+d[1],company:d[2],title:d[3],phone:sanitize(d[4]).e164,raw:d[4],email:d[5],stage:d[6],value:d[7],tz:d[8],source:d[9],score:60+Math.floor(Math.random()*40),lastCalled:null,notes:[{t:Date.now()-86400000*(2+i%4),text:'Sourced via '+d[9]+'. Interested in international call rates.'}]}));
+  calls=[{id:uid(),leadId:leads[3].id,leadName:leads[3].name,company:leads[3].company,phone:leads[3].phone,mode:'callback',disposition:'Follow-Up',duration:187,time:Date.now()-86400000,note:'Asked to call back Thu with pricing.'},{id:uid(),leadId:leads[8].id,leadName:leads[8].name,company:leads[8].company,phone:leads[8].phone,mode:'voip',disposition:'Qualified',duration:342,time:Date.now()-86400000*2,note:'Loved the VoIP quality. Wants trial.'},{id:uid(),leadId:leads[2].id,leadName:leads[2].name,company:leads[2].company,phone:leads[2].phone,mode:'callback',disposition:'Voicemail',duration:24,time:Date.now()-3600000*5,note:'Left VM.'}];
+}
+function save(){localStorage.setItem('pulse_leads_v2',JSON.stringify(leads));localStorage.setItem('pulse_calls_v2',JSON.stringify(calls));localStorage.setItem('pulse_settings_v2',JSON.stringify(settings));}
+function load(){try{leads=JSON.parse(localStorage.getItem('pulse_leads_v2'))||[];calls=JSON.parse(localStorage.getItem('pulse_calls_v2'))||[];settings=JSON.parse(localStorage.getItem('pulse_settings_v2'))||defaultSettings();}catch(e){leads=[];calls=[];settings=defaultSettings();}if(!leads.length){seed();save();}}
+function initials(n){return n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();}
+function grad(n){let h=0;for(const c of n)h+=c.charCodeAt(0);const g=GRADS[h%GRADS.length];return `linear-gradient(135deg,${g[0]},${g[1]})`;}
+function fmtDur(s){s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+function timeAgo(t){if(!t)return'never';const d=(Date.now()-t)/1000;if(d<60)return'just now';if(d<3600)return Math.floor(d/60)+'m ago';if(d<86400)return Math.floor(d/3600)+'h ago';return Math.floor(d/86400)+'d ago';}
+function fmtTime(t){return new Date(t).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});}
+function money(v){return '$'+Number(v||0).toLocaleString();}
+function toast(msg,sub='',tone='ok'){const t=document.createElement('div');t.className='toast';const c=tone==='ok'?'#10b981':tone==='warn'?'#f59e0b':'#ef4444';t.innerHTML=`<div style="width:36px;height:36px;border-radius:11px;display:grid;place-items:center;background:${c}22;border:1px solid ${c}55;color:${c};font-weight:800">${tone==='ok'?'✓':tone==='warn'?'!':'✕'}</div><div class="min-w-0"><div class="font-bold text-[13px]">${msg}</div>${sub?`<div class="text-[12px]" style="color:var(--muted)">${sub}</div>`:''}</div>`;$('#toasts').appendChild(t);setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(20px)';setTimeout(()=>t.remove(),300)},3600);}
+
+/* ================= PHONE SANITIZE ================= */
+function sanitize(raw){if(!raw)return{e164:'',valid:false};let s=String(raw).trim();let plus=s.trim().startsWith('+');let d=s.replace(/\D/g,'');if(s.startsWith('00')){d=d.replace(/^00/,'');plus=true;}if(!plus){if(d.length===10)d='1'+d;else if(d.length===11&&d[0]==='1'){}else if(d.length>7){}else return{e164:raw,valid:false};}const e164='+'+d;return{e164,valid:d.length>=7&&d.length<=15};}
+
+/* ================= THEME / CLOCK ================= */
+function toggleTheme(){const h=document.documentElement;h.dataset.theme=h.dataset.theme==='dark'?'light':'dark';toast(h.dataset.theme==='dark'?'Dark mode on':'Light mode on','Linear-grade minimalism');}
+setInterval(()=>{const d=new Date();$('#menuClock').textContent=d.toLocaleDateString([],{weekday:'short'})+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');},1000);
+
+/* ================= NAV ================= */
+const TITLES={dialer:['Active Dialer','Power Dialer'],pipeline:['Pipeline Board','Sales Pipeline'],history:['Call History','Call History'],import:['Import Leads','CSV Importer'],analytics:['Analytics','Performance'],setup:['Setup & API','macOS Setup & Backend']};
+function showView(v){$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===v));['dialer','pipeline','history','import','analytics','setup'].forEach(x=>$('#view-'+x).classList.toggle('hidden',x!==v));$('#crumb').textContent=TITLES[v][0];$('#viewTitle').textContent=TITLES[v][1];if(v==='analytics')initCharts();if(v==='pipeline')renderKanban();if(v==='history')renderHistory();}
+$$('.nav-item').forEach(b=>b.onclick=()=>showView(b.dataset.view));
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();togglePalette();}if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;if(e.key.toLowerCase()==='n')startDialNext();if(e.key.toLowerCase()==='h')hangUp(true);if(e.key.toLowerCase()==='m')toggleCtrl('mute');for(let i=1;i<=6;i++)if(e.key==String(i)&&(e.metaKey||e.ctrlKey)){e.preventDefault();showView(['dialer','pipeline','history','import','analytics','setup'][i-1]);}});
+
+/* ================= MODE TOGGLE ================= */
+function setMode(m){settings.mode=m;save();const cb=m==='callback';$('#modeThumb').className='mode-thumb '+(cb?'callback':'voip');$$('.mode-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));const badge=$('#modeBadge');badge.className='badge '+(cb?'badge-cb':'badge-voip');badge.innerHTML=`<span class="pulse-dot" style="background:currentColor"></span> ${cb?'CALL BACK ACTIVE':'INTERNET · VOIP ACTIVE'}`;$('#modeSub').textContent=cb?('fwd → '+settings.agentPhone):('sip → '+settings.sipUser+'@'+settings.sipDomain);$('#menuMode').textContent=cb?'● Call Back':'◍ Internet VoIP';$('#callStateLabel').className='badge mt-1 '+(cb?'badge-cb':'badge-voip');logApi(`Mode switched → ${m.toUpperCase()}`,{mode:m,via:cb?'PSTN callback leg':'SIP/WebRTC leg',caller_id:settings.callerId});toast(cb?'Call Back mode':'Internet (VoIP) mode',cb?'We ring you first, then bridge the lead.':'Voice over internet via headset — low latency.');}
+$('#autoNextSw').onclick=function(){this.classList.toggle('on');settings.autoAdvance=this.classList.contains('on');save();};
+
+/* ================= QUEUE ================= */
+function setQueueFilter(f,el){queueFilter=f;$$('#queueFilters button').forEach(b=>{b.style.background='';b.style.color='';b.style.borderColor='';});el.style.background='rgba(110,107,253,.15)';el.style.color='var(--accent2)';el.style.borderColor='rgba(110,107,253,.4)';renderQueue();}
+function queueLeads(){let q=leads.filter(l=>!['won','lost'].includes(l.stage));if(queueFilter!=='all')q=q.filter(l=>l.stage===queueFilter||(queueFilter==='new'&&l.stage==='new'));const s=($('#queueSearch').value||'').toLowerCase();if(s)q=q.filter(l=>(l.name+l.company+l.phone).toLowerCase().includes(s));return q.sort((a,b)=>b.score-a.score);}
+function activeLead(){return leads.find(l=>l.id===activeLeadId);}
+function renderQueue(){const q=queueLeads();$('#queueCount').textContent=q.length;$('#queueCountMini').textContent=q.length;$('#queueList').innerHTML=q.map((l,i)=>{const st=STAGES.find(s=>s.id===l.stage);return`<div class="queue-row ${l.id===activeLeadId?'active':''}" onclick="loadLead('${l.id}')"><span class="mono text-[11px] font-bold" style="color:var(--muted2)">${String(i+1).padStart(2,'0')}</span><div class="avatar" style="width:34px;height:34px;font-size:12px;background:${grad(l.name)}">${initials(l.name)}</div><div class="min-w-0 flex-1"><div class="text-[13px] font-bold truncate">${l.name}</div><div class="mono text-[11px] truncate" style="color:var(--muted)">${l.phone}</div></div><div class="text-right flex-shrink-0"><div class="flex items-center gap-1.5 justify-end"><span class="stage-dot" style="background:${st.color}"></span><span class="text-[10.5px] font-bold" style="color:var(--muted)">${st.label.split(' ')[0]}</span></div><div class="mono text-[11px] font-bold">${money(l.value)}</div></div></div>`;}).join('')||'<div class="text-center text-[12.5px] p-6" style="color:var(--muted)">Queue clear — import or add leads 🎉</div>';
+$('#miniQueue').innerHTML=queueLeads().slice(0,4).map(l=>`<button onclick="loadLead('${l.id}')" class="nav-item !py-2"><div class="avatar" style="width:26px;height:26px;font-size:10px;background:${grad(l.name)}">${initials(l.name)}</div><span class="truncate text-[12.5px]">${l.name}</span><span class="ml-auto mono text-[10.5px] opacity-60">${money(l.value)}</span></button>`).join('');}
+function loadLead(id){if(call.state==='dialing'||call.state==='ringing'||call.state==='connected'){toast('Finish current call first','Hang up before switching leads.','warn');return;}activeLeadId=id;call.dispo=null;renderConsole();renderQueue();renderDispo();}
+
+/* ================= CONSOLE ================= */
+function renderConsole(){const l=activeLead();if(!l){$('#heroAvatar').textContent='—';$('#heroName').textContent='No lead loaded';$('#heroMeta').textContent='Press Dial Next to load your highest-priority lead';$('#heroPhone').textContent='—';return;}$('#heroAvatar').textContent=initials(l.name);$('#heroAvatar').style.background=grad(l.name);$('#heroName').textContent=l.name;$('#heroMeta').textContent=`${l.title} · ${l.company} · ${l.tz} · ${l.email}`;$('#heroPhone').textContent=l.phone;const st=STAGES.find(s=>s.id===l.stage);$('#heroStage').innerHTML=`<span class="stage-dot inline-block mr-1" style="background:${st.color}"></span>${st.label}`;renderLeadTabs();drawWave();}
+function renderLeadTabs(){const l=activeLead();if(!l)return;$('#tab-details').innerHTML=`<div class="grid grid-cols-2 gap-2.5 text-[13px]"><div><label>Phone</label><input value="${l.phone}" onchange="editLead('phone',this.value)"></div><div><label>Email</label><input value="${l.email}" onchange="editLead('email',this.value)"></div><div><label>Company</label><input value="${l.company}" onchange="editLead('company',this.value)"></div><div><label>Title</label><input value="${l.title}" onchange="editLead('title',this.value)"></div><div><label>Deal value</label><input type="number" value="${l.value}" onchange="editLead('value',this.value)"></div><div><label>Stage</label><select onchange="editLead('stage',this.value)">${STAGES.map(s=>`<option value="${s.id}" ${s.id===l.stage?'selected':''}>${s.label}</option>`).join('')}</select></div></div><div class="flex gap-2 mt-3"><div class="card flex-1 p-3 text-center"><div class="text-[10px] font-bold" style="color:var(--muted)">SCORE</div><div class="mono font-extrabold text-[18px]">${l.score}</div></div><div class="card flex-1 p-3 text-center"><div class="text-[10px] font-bold" style="color:var(--muted)">LAST CALLED</div><div class="font-bold text-[13px]">${timeAgo(l.lastCalled)}</div></div><div class="card flex-1 p-3 text-center"><div class="text-[10px] font-bold" style="color:var(--muted)">SOURCE</div><div class="font-bold text-[13px]">${l.source}</div></div></div>`;
+$('#notesCount').textContent=l.notes.length;$('#notesList').innerHTML=l.notes.slice().reverse().map(n=>`<div class="p-3 rounded-xl text-[12.5px]" style="background:var(--panel2);border:1px solid var(--border)"><div class="text-[10.5px] font-bold mb-1" style="color:var(--muted)">${fmtTime(n.t)}</div>${n.text}</div>`).join('');
+$('#scriptBox').innerHTML=`Hey <b>${l.first}</b> — it's Alex from <b>Dialflow</b>. We help teams like <b>${l.company}</b> cut international call costs ~40% while dialing 3× faster with Sonetel. Got 27 seconds to hear how?`;
+$('#objCards').innerHTML=OBJECTIONS.map(o=>`<div class="p-3 rounded-xl" style="background:var(--panel2);border:1px solid var(--border)"><div class="font-bold text-[12.5px]">${o[0]}</div><div class="text-[12px] mt-0.5" style="color:var(--muted)">${o[1]}</div></div>`).join('');}
+function editLead(k,v){const l=activeLead();if(!l)return;if(k==='phone'){const s=sanitize(v);l.phone=s.e164;l.raw=v;if(!s.valid)toast('Invalid number','Check E.164 format.','err');}else l[k]=k==='value'?Number(v):v;save();renderConsole();renderQueue();renderKanban();}
+function leadTab(t,el){$$('#colRight .tab-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');['details','notes','script'].forEach(x=>$('#tab-'+x).classList.toggle('hidden',x!==t));}
+function saveNote(){const v=$('#noteBox').value.trim();if(!v)return;activeLead().notes.push({t:Date.now(),text:v});$('#noteBox').value='';save();renderLeadTabs();toast('Note saved','Attached to '+activeLead().name);}
+$('#noteBox')?.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter')saveNote();});
+function copyScript(){navigator.clipboard.writeText($('#scriptBox').innerText);toast('Script copied','Paste it anywhere.');}
+function openAddLead(){$('#addModal').classList.remove('hidden');$('#addModal').classList.add('flex');}
+function addLead(){const f=$('#n_first').value||'New',la=$('#n_last').value||'Lead',ph=$('#n_phone').value;if(!ph){toast('Phone required','Add a phone number.','err');return;}const s=sanitize(ph);const l={id:uid(),first:f,last:la,name:f+' '+la,company:$('#n_company').value||'—',title:'—',phone:s.e164,raw:ph,email:$('#n_email').value||'',stage:'new',value:Number($('#n_value').value)||5000,tz:'PT',source:'Manual',score:75,lastCalled:null,notes:[]};leads.unshift(l);save();$('#addModal').classList.add('hidden');$('#addModal').classList.remove('flex');renderAll();toast('Lead added',l.name+' → New Leads');}
+
+/* ---- dispositions ---- */
+const DISPO_C={Connected:'#a78bfa','No Answer':'#64748b',Voicemail:'#f59e0b',Busy:'#f97316','Follow-Up':'#f472b6',Qualified:'#10b981',Won:'#22c55e',Lost:'#ef4444',DNC:'#18181b'};
+function renderDispo(){$('#dispoGrid').innerHTML=DISPOS.map(d=>`<button class="dispo ${call.dispo===d?'sel':''}" onclick="pickDispo('${d}')"><span class="stage-dot inline-block mr-1" style="background:${DISPO_C[d]}"></span>${d}</button>`).join('');$('#dispoHint').textContent=call.dispo?('✓ '+call.dispo):'● pick one';$('#dispoHint').style.color=call.dispo?'#10b981':'var(--amber)';}
+function pickDispo(d){call.dispo=d;renderDispo();addTl(`Outcome marked: ${d}`,'done');beep(660,.07);}
+
+/* ---- call engine ---- */
+function startDialNext(){const q=queueLeads();if(!q.length){toast('Queue empty','Import leads to keep dialing.','warn');return;}const nxt=q.find(l=>l.id!==activeLeadId)||q[0];activeLeadId=nxt.id;call.dispo=null;renderConsole();renderQueue();renderDispo();setTimeout(()=>dial(),250);}
+function redial(){if(!activeLead()){startDialNext();return;}dial();}
+function clearCallTimers(){call.timeouts.forEach(clearTimeout);call.timeouts=[];clearInterval(call.timerInt);}
+function dial(){const l=activeLead();if(!l)return;if(['dialing','ringing','connected'].includes(call.state)){toast('Already in a call','Hang up first.','warn');return;}clearCallTimers();call.state='dialing';call.elapsed=0;call.muted=false;call.hold=false;call.dtmf='';$('#dtmfShow').textContent='—';['mute','hold'].forEach(k=>$('#btn'+(k==='mute'?'Mute':'Hold')).classList.remove('on','danger-on'));updateCallUI();$('#hangBtn').classList.remove('opacity-40','pointer-events-none');$('#hangNextBtn').classList.remove('opacity-40','pointer-events-none');$('#dialBtn').classList.add('opacity-40','pointer-events-none');
+const isCb=settings.mode==='callback';
+const payload=isCb?{via:'fastapi-proxy → POST https://api.sonetel.com/call/callback',from:settings.agentPhone,to:l.phone,caller_id:settings.callerId,app:'dialflow-macos',record:settings.record}:{via:'fastapi-proxy → POST https://api.sonetel.com/call/sip (WebRTC)',to:l.phone,caller_id:settings.callerId,sip:`sip:${settings.sipUser}@${settings.sipDomain}`,headset:$('#s_audio')?.value||'Default',record:settings.record,webrtc:true};
+logApi(`POST ${isCb?'/api/call/callback':'/api/call/sip'} — ${l.name} ${l.phone}`,payload);
+const steps=isCb?['Authenticating OAuth2 → Sonetel token ✓',`Calling YOU first: ${settings.agentPhone}…`,'You answered — bridging to lead…',`Lead ringing: ${l.phone}…`]:[`Registering SIP ${settings.sipDomain} ✓`,'Headset + mic check… OK','Dialing via WebRTC / Opus…',`Ringing ${l.name}…`];
+$('#callTimeline').innerHTML='';steps.forEach((s,i)=>{call.timeouts.push(setTimeout(()=>{addTl(s,i===steps.length-1?'busy':'done');if(i===steps.length-1){call.state='ringing';updateCallUI();startRing();}$('#footApi').textContent=`api.sonetel.com · ${38+Math.floor(Math.random()*60)} ms`;},700*(i+1)));});
+call.timeouts.push(setTimeout(()=>{stopRing();call.state='connected';call.connectedTs=Date.now();updateCallUI();addTl('Connected — timer running. Talk!','done');beep(880,.12);call.timerInt=setInterval(()=>{call.elapsed++;$('#callTimer').textContent=fmtDur(call.elapsed);},1000);toast('Connected',l.name+' · '+l.phone);},700*(steps.length+1)+600));}
+function addTl(txt,st='done'){const box=$('#callTimeline');if(box.querySelector('.text-\\[12\\.5px\\]'))box.innerHTML='';const d=document.createElement('div');d.className='timeline-step';d.innerHTML=`<div class="t-dot ${st}">${st==='done'?'✓':'◌'}</div><div class="flex-1"><span class="mono opacity-50 mr-1">${new Date().toLocaleTimeString([],{hour12:false})}</span>${txt}</div>`;box.appendChild(d);box.scrollTop=9999;}
+function updateCallUI(){const m={idle:['IDLE','badge-cb'],dialing:['DIALING','badge-voip'],ringing:['RINGING','badge-voip'],connected:['LIVE','badge-voip'],hold:['ON HOLD','badge-cb']}[call.hold&&call.state==='connected'?'hold':call.state];$('#callStateLabel').textContent=m[0];$('#callStateLabel').className='badge mt-1 '+m[1];$('#miniEq').classList.toggle('paused',call.state!=='connected'||call.hold);$('#heroAvatar').classList.toggle('ring-anim',call.state==='ringing'||call.state==='dialing');}
+function toggleCtrl(k){if(call.state!=='connected'&&call.state!=='ringing'){toast('No active call','Dial first.','warn');return;}if(k==='mute'){call.muted=!call.muted;$('#btnMute').classList.toggle('danger-on',call.muted);addTl(call.muted?'Microphone muted':'Microphone unmuted','done');}if(k==='hold'){call.hold=!call.hold;$('#btnHold').classList.toggle('on',call.hold);addTl(call.hold?'Call placed on hold (music)':'Resumed from hold','done');updateCallUI();}if(k==='rec'){call.rec=!call.rec;$('#btnRec').classList.toggle('on',call.rec);addTl(call.rec?'Recording started ●':'Recording paused','done');}}
+/* keypad */
+$('#dtmfGrid').innerHTML=['1','2','3','4','5','6','7','8','9','*','0','#'].map(k=>`<button class="ctrl-btn !w-full !h-11 !rounded-xl mono font-bold" onclick="dtmf('${k}')">${k}</button>`).join('');
+function dtmf(k){call.dtmf+=k;$('#dtmfShow').textContent=call.dtmf.split('').join(' ');beep(k==='#'?940:440+k.charCodeAt(0)*8,.08);addTl('DTMF sent: '+k,'done');}
+function hangUp(advance=false){if(!['dialing','ringing','connected'].includes(call.state)){toast('No active call','Nothing to hang up.','warn');return;}if(!call.dispo){toast('Pick a disposition first','Required for pipeline + history.','err');$('#dispoGrid').scrollIntoView({behavior:'smooth',block:'center'});return;}clearCallTimers();stopRing();const l=activeLead();const dur=call.elapsed<3&&call.state!=='connected'?8+Math.floor(Math.random()*20):call.elapsed;const rec={id:uid(),leadId:l.id,leadName:l.name,company:l.company,phone:l.phone,mode:settings.mode,disposition:call.dispo,duration:dur,time:Date.now(),note:($('#noteBox').value||'').trim()};calls.unshift(rec);if(rec.note){l.notes.push({t:Date.now(),text:'[Call '+fmtDur(dur)+'] '+rec.note});$('#noteBox').value='';}const map={'Connected':'connected','No Answer':'attempted',Voicemail:'attempted',Busy:'attempted','Follow-Up':'followup',Qualified:'qualified',Won:'won',Lost:'lost',DNC:'lost'};l.stage=map[call.dispo]||'attempted';l.lastCalled=Date.now();l.score=Math.max(10,l.score-4);save();addTl(`Hung up · ${fmtDur(dur)} · saved as “${call.dispo}” → moved to ${STAGES.find(s=>s.id===l.stage).label}`,'done');logApi('POST /api/calls — commit disposition',{call_id:rec.id,disposition:rec.disposition,duration_s:dur,next_stage:l.stage});call.state='idle';call.dispo=null;$('#callTimer').textContent='00:00';updateCallUI();$('#hangBtn').classList.add('opacity-40','pointer-events-none');$('#hangNextBtn').classList.add('opacity-40','pointer-events-none');$('#dialBtn').classList.remove('opacity-40','pointer-events-none');renderAll();toast('Logged ✓ '+l.name,`${call.dispo||rec.disposition} · ${fmtDur(dur)} · ${l.stage}`);updateSess();if(advance&&settings.autoAdvance){setTimeout(()=>{startDialNext();},(settings.delay||1.5)*1000);}}
+function updateSess(){const t=new Date();const today=calls.filter(c=>new Date(c.time).toDateString()===t.toDateString());const talk=today.reduce((a,c)=>a+c.duration,0);$('#sessStats').textContent=`${today.length} calls · ${fmtDur(talk)} talk`;$('#footSess').textContent=`today ${today.length} calls · ${fmtDur(talk)} · mode ${settings.mode}`;}
+/* audio blips */
+let AC=null;function beep(f,d=.1){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=f;o.type='sine';g.gain.value=.08;o.connect(g);g.connect(AC.destination);o.start();g.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+d);o.stop(AC.currentTime+d);}catch(e){}}
+let ringInt=null;function startRing(){stopRing();let n=0;ringInt=setInterval(()=>{beep(n%2?440:480,.25);n++;},700);}function stopRing(){clearInterval(ringInt);}
+/* waveform */
+function drawWave(){const c=$('#wave'),x=c.getContext('2d');c.width=c.offsetWidth*2||800;c.height=128;let t=0;function f(){x.clearRect(0,0,c.width,c.height);x.strokeStyle='#6e6bfd';x.lineWidth=3;x.shadowColor='rgba(110,107,253,.6)';x.shadowBlur=12;x.beginPath();const live=call.state==='connected'&&!call.hold;for(let i=0;i<c.width;i+=4){const a=live?(Math.sin(i*.02+t)*24+Math.sin(i*.05+t*1.7)*14+ (Math.random()*8-4)):(Math.sin(i*.02+t*.3)*5);x.lineTo(i,c.height/2+a);}x.stroke();t+=live?.25:.02;requestAnimationFrame(f);}f();}
+function logApi(title,obj){$('#apiLog').textContent=`› ${new Date().toLocaleTimeString()}  ${title}\n${JSON.stringify(obj,null,2)}\n\n— proxied via FastAPI to avoid CORS. See Setup & API › app.py`;$('#apiLog').scrollTop=9999;}
+function copyApiLog(){navigator.clipboard.writeText($('#apiLog').textContent);toast('API log copied');}
+
+/* ================= KANBAN ================= */
+function renderKanban(){const s=($('#pipeSearch').value||'').toLowerCase();$('#pipeValue').textContent=money(leads.filter(l=>!['lost'].includes(l.stage)).reduce((a,l)=>a+ +l.value,0));const won=leads.filter(l=>l.stage==='won').length,closed=won+leads.filter(l=>l.stage==='lost').length;$('#pipeWin').textContent=(closed?Math.round(won/closed*100):0)+'%';$('#pipeCount').textContent=leads.length;
+$('#kanbanBoard').innerHTML=STAGES.map(st=>{const items=leads.filter(l=>l.stage===st.id&&(!s||(l.name+l.company+l.phone).toLowerCase().includes(s)));const val=items.reduce((a,l)=>a+ +l.value,0);return`<div class="kanban-col" data-stage="${st.id}"><div class="flex items-center gap-2 p-3.5" style="border-bottom:1px solid var(--border)"><span class="stage-dot" style="background:${st.color}"></span><span class="font-extrabold text-[13px]">${st.label}</span><span class="chip ml-auto">${items.length}</span></div><div class="text-[11px] mono font-bold px-3.5 pt-2" style="color:var(--muted)">${money(val)}</div><div class="flex-1 overflow-y-auto p-2.5 flex flex-col gap-2 dropzone-kanban" style="min-height:120px">${items.map(l=>`<div class="lead-card" draggable="true" data-id="${l.id}"><div class="flex items-center gap-2"><div class="avatar" style="width:30px;height:30px;font-size:11px;background:${grad(l.name)}">${initials(l.name)}</div><div class="min-w-0 flex-1"><div class="font-bold text-[13px] truncate">${l.name}</div><div class="text-[11px] truncate" style="color:var(--muted)">${l.company}</div></div><span class="mono text-[11px] font-bold">${money(l.value)}</span></div><div class="mono text-[11px] mt-2" style="color:var(--muted)">${l.phone}</div><div class="flex items-center gap-2 mt-2"><span class="chip">★ ${l.score}</span><span class="chip">${timeAgo(l.lastCalled)}</span><button onclick="loadLead('${l.id}');showView('dialer')" class="ml-auto text-[11px] font-extrabold px-2.5 py-1 rounded-lg" style="background:rgba(110,107,253,.15);color:var(--accent2)">Dial →</button></div></div>`).join('')||'<div class="text-center text-[11.5px] p-4 opacity-50">Drop cards here</div>'}</div></div>`;}).join('');
+$$('.lead-card').forEach(c=>{c.addEventListener('dragstart',()=>c.classList.add('dragging'));c.addEventListener('dragend',()=>c.classList.remove('dragging'));});
+$$('.kanban-col').forEach(col=>{col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('dragover');});col.addEventListener('dragleave',()=>col.classList.remove('dragover'));col.addEventListener('drop',e=>{e.preventDefault();col.classList.remove('dragover');const card=document.querySelector('.dragging');if(!card)return;const l=leads.find(x=>x.id===card.dataset.id);l.stage=col.dataset.stage;save();renderKanban();renderQueue();toast('Moved → '+STAGES.find(s=>s.id===l.stage).label,l.name);});});}
+
+/* ================= HISTORY ================= */
+function renderHistory(){const ds=[...new Set(calls.map(c=>c.disposition))];$('#histDispo').innerHTML='<option value="all">All outcomes</option>'+ds.map(d=>`<option>${d}</option>`).join('');const q=($('#histSearch').value||'').toLowerCase(),m=$('#histMode').value,d=$('#histDispo').value;const f=calls.filter(c=>(m==='all'||c.mode===m)&&(d==='all'||c.disposition===d)&&(!q||(c.leadName+c.phone+(c.note||'')).toLowerCase().includes(q)));
+$('#histCount').textContent=f.length+' calls';const tot=f.reduce((a,c)=>a+c.duration,0);$('#histKpis').innerHTML=[['Total calls',f.length,'◷'],['Talk time',fmtDur(tot),'◍'],['Connect rate',f.length?Math.round(f.filter(c=>['Connected','Qualified','Won'].includes(c.disposition)).length/f.length*100)+'%':'—','⚡'],['VoIP share',f.length?Math.round(f.filter(c=>c.mode==='voip').length/f.length*100)+'%':'—','↩']].map(k=>`<div class="card p-4"><div class="text-[11px] font-bold" style="color:var(--muted)">${k[2]} ${k[0].toUpperCase()}</div><div class="mono font-extrabold text-[22px] mt-1">${k[1]}</div></div>`).join('');
+$('#historyBody').innerHTML=f.map(c=>`<tr><td class="whitespace-nowrap" style="color:var(--muted)">${fmtTime(c.time)}</td><td><div class="font-bold">${c.leadName}</div><div class="mono text-[11px]" style="color:var(--muted)">${c.company} · ${c.phone}</div></td><td><span class="badge ${c.mode==='callback'?'badge-cb':'badge-voip'}">${c.mode==='callback'?'↩ Call Back':'◍ VoIP'}</span></td><td class="mono font-bold">${fmtDur(c.duration)}</td><td><span class="chip" style="border-color:${DISPO_C[c.disposition]||'var(--border)'};color:${DISPO_C[c.disposition]||'var(--muted)'}">● ${c.disposition}</span></td><td class="text-[12px]" style="color:var(--muted)">${c.note||'—'}</td></tr>`).join('')||'<tr><td colspan="6" class="text-center p-8 opacity-50">No calls yet — start dialing.</td></tr>';}
+function exportHistory(){const csv='time,lead,company,phone,mode,disposition,duration_s,note\n'+calls.map(c=>[new Date(c.time).toISOString(),`"${c.leadName}"`,`"${c.company}"`,c.phone,c.mode,c.disposition,c.duration,`"${(c.note||'').replace(/"/g,'""')}"`].join(',')).join('\n');dl(csv,'call-history.csv','text/csv');toast('Exported','call-history.csv downloaded.');}
+function clearHistory(){if(!confirm('Clear all call history?'))return;calls=[];save();renderHistory();updateSess();}
+function dl(content,name,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();}
+
+/* ================= IMPORT ================= */
+let staged=null,stagedMap={};
+const FIELDS=[['phone','Phone *'],['first','First name'],['last','Last name'],['email','Email'],['company','Company'],['title','Title'],['value','Deal value'],['stage','Stage'],['tz','Timezone'],['source','Source']];
+function parseCSV(t){const rows=[];let cur=[''],q=false;for(let i=0;i<t.length;i++){const c=t[i];if(c==='"'){if(q&&t[i+1]==='"'){cur[cur.length-1]+='"';i++;}else q=!q;}else if(c===','&&!q){cur.push('');}else if((c==='\n'||c==='\r')&&!q){if(cur.join('').trim())rows.push(cur);cur=[''];if(c==='\r'&&t[i+1]==='\n')i++;}else cur[cur.length-1]+=c;}if(cur.join('').trim())rows.push(cur);return rows;}
+function autoMap(head){const m={};FIELDS.forEach(([k])=>{m[k]='';});head.forEach((h,i)=>{const s=h.toLowerCase();if(/phone|mobile|tel|number|contact/.test(s)&&!m.phone)m.phone=i;else if(/first|fname|given/.test(s)&&!m.first)m.first=i;else if(/last|lname|surname|family/.test(s)&&!m.last)m.last=i;else if(/mail/.test(s)&&!m.email)m.email=i;else if(/compan|org|business|account/.test(s)&&!m.company)m.company=i;else if(/title|role|position|job/.test(s)&&!m.title)m.title=i;else if(/value|deal|amount|revenue/.test(s)&&!m.value)m.value=i;else if(/stage|status|pipeline/.test(s)&&!m.stage)m.stage=i;else if(/zone|^tz/.test(s)&&!m.tz)m.tz=i;else if(/source|lead_|campaign/.test(s)&&!m.source)m.source=i;else if(/name/.test(s)&&!m.first)m.first=i;});return m;}
+function handleFile(f){const r=new FileReader();r.onload=()=>{try{const rows=parseCSV(r.result);if(rows.length<2)throw 0;staged={head:rows[0].map(h=>h.trim()),rows:rows.slice(1)};stagedMap=autoMap(staged.head);renderImportPreview();toast('Parsed '+staged.rows.length+' rows','Review mapping, then import.');}catch(e){toast('Could not parse file','Use CSV with a header row.','err');}};r.readAsText(f);}
+const dz=$('#dropzone');dz.onclick=()=>$('#fileIn').click();$('#fileIn').onchange=e=>e.target.files[0]&&handleFile(e.target.files[0]);['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('over')}));['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('over')}));dz.addEventListener('drop',e=>e.dataTransfer.files[0]&&handleFile(e.dataTransfer.files[0]));
+function renderImportPreview(){const{h}=staged;$('#mapGrid').innerHTML=FIELDS.map(([k,label])=>`<div><label>${label}</label><select data-map="${k}" onchange="stagedMap['${k}']=this.value===''? '' : +this.value;renderImportPreview()"><option value="">— ignore —</option>${staged.head.map((hh,i)=>`<option value="${i}" ${stagedMap[k]===i?'selected':''}>${hh}</option>`).join('')}</select></div>`).join('');
+$('#prevHead').innerHTML='<th>#</th>'+staged.head.map(h=>`<th>${h}</th>`).join('')+'<th>Sanitized</th>';
+$('#prevBody').innerHTML=staged.rows.slice(0,6).map((r,i)=>{const ph=stagedMap.phone===''?'':(r[stagedMap.phone]||'');const s=sanitize(ph);return`<tr><td class="mono opacity-50">${i+1}</td>${staged.head.map((_,j)=>`<td>${r[j]||''}</td>`).join('')}<td class="mono text-[11.5px] font-bold" style="color:${s.valid?'#10b981':'#ef4444'}">${s.e164||'—'} ${s.valid?'✓':'✕'}</td></tr>`;}).join('');
+const ok=staged.rows.filter(r=>sanitize(stagedMap.phone===''?'':(r[stagedMap.phone]||'')).valid).length;$('#importStats').innerHTML=[['Rows',staged.rows.length],['Valid #',ok],['Invalid',staged.rows.length-ok]].map(x=>`<div class="p-2.5 rounded-xl text-center" style="background:var(--panel2);border:1px solid var(--border)"><div class="text-[10px] font-bold" style="color:var(--muted)">${x[0]}</div><div class="mono font-extrabold">${x[1]}</div></div>`).join('');
+const b=$('#importBtn');if(stagedMap.phone===''||stagedMap.phone==null){b.classList.add('opacity-40','pointer-events-none');}else b.classList.remove('opacity-40','pointer-events-none');}
+function doImport(){if(!staged||stagedMap.phone==='')return;let add=0,skip=0;const seen=new Set(leads.map(l=>l.phone));staged.rows.forEach(r=>{const g=k=>stagedMap[k]===''||stagedMap[k]==null?'':(r[stagedMap[k]]||'').trim();const s=sanitize(g('phone'));if(!s.valid||seen.has(s.e164)){skip++;return;}const first=g('first')||'New',last=g('last')||'';leads.unshift({id:uid(),first,last,name:(first+' '+last).trim(),company:g('company')||'—',title:g('title')||'—',phone:s.e164,raw:g('phone'),email:g('email'),stage:['new','attempted','connected','followup','qualified','won','lost'].includes(g('stage').toLowerCase())?g('stage').toLowerCase():'new',value:Number(g('value').replace(/[^0-9.]/g,''))||5000,tz:g('tz')||'PT',source:g('source')||'CSV import',score:60+Math.floor(Math.random()*30),lastCalled:null,notes:[]});seen.add(s.e164);add++;});save();renderAll();toast(`Imported ${add} leads`,`${skip} skipped (invalid/duplicate).`);staged=null;$('#mapGrid').innerHTML='<div class="text-[13px] p-6 text-center col-span-2 rounded-xl" style="color:var(--muted);background:var(--panel2)">Done ✓ — drop another file anytime.</div>';$('#prevHead').innerHTML='';$('#prevBody').innerHTML='';showView('pipeline');}
+function downloadSample(){dl('first_name,last_name,company,phone,email,deal_value,stage\nAva,Stone,Acme Inc,+1 415 555 0110,ava@acme.com,12000,new\nNoah,Kim,Globex,0044 7700 900456,noah@globex.uk,8500,followup\nMia,Rossi,Initech,(312) 555-0144,mia@initech.com,20000,new','sample-leads.csv','text/csv');}
+function pasteDemo(){handleFile(new File(['first_name,last_name,company,phone,email,deal_value\nElla,Hunt,Vertex,+1 646 555 0120,ella@vertex.co,18000\nOmar,Haddad,Cedrus,+46 8 555 0199,omar@cedrus.se,9400\nZoe,Adams,Nimbus,+1 415 555 0177,zoe@nimbus.io,22000'],'demo.csv'));}
+
+/* ================= ANALYTICS ================= */
+let charts={};
+function initCharts(){const days=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));return d;});const lbl=days.map(d=>d.toLocaleDateString([],{weekday:'short'}));const per=days.map(d=>calls.filter(c=>new Date(c.time).toDateString()===d.toDateString()).length);const talk=days.map(d=>+(calls.filter(c=>new Date(c.time).toDateString()===d.toDateString()).reduce((a,c)=>a+c.duration,0)/60).toFixed(1));const dark=document.documentElement.dataset.theme==='dark';const grid=dark?'rgba(255,255,255,.07)':'rgba(0,0,0,.07)',tk=dark?'#8b93a7':'#64748b';Object.values(charts).forEach(c=>c.destroy());charts={};
+charts.a=new Chart($('#chCalls'),{type:'bar',data:{labels:lbl,datasets:[{data:per,backgroundColor:'rgba(110,107,253,.7)',borderRadius:8}]},options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:tk},grid:{display:false}},y:{ticks:{color:tk},grid:{color:grid}}}}});
+const dc={};calls.forEach(c=>dc[c.disposition]=(dc[c.disposition]||0)+1);charts.b=new Chart($('#chDispo'),{type:'doughnut',data:{labels:Object.keys(dc).length?Object.keys(dc):['No data'],datasets:[{data:Object.values(dc).length?Object.values(dc):[1],backgroundColor:['#a78bfa','#64748b','#f59e0b','#f97316','#f472b6','#10b981','#22c55e','#ef4444','#38bdf8'],borderWidth:0}]},options:{plugins:{legend:{position:'bottom',labels:{color:tk,boxWidth:10,font:{size:10}}}}}});
+charts.c=new Chart($('#chFunnel'),{type:'bar',data:{labels:STAGES.map(s=>s.label),datasets:[{data:STAGES.map(s=>leads.filter(l=>l.stage===s.id).length),backgroundColor:STAGES.map(s=>s.color),borderRadius:8}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{color:tk},grid:{color:grid}},y:{ticks:{color:tk,font:{size:10}},grid:{display:false}}}}});
+charts.d=new Chart($('#chTalk'),{type:'line',data:{labels:lbl,datasets:[{data:talk,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.15)',fill:true,tension:.4,pointRadius:4}]},options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:tk},grid:{display:false}},y:{ticks:{color:tk},grid:{color:grid}}}}});
+const t=calls.reduce((a,c)=>a+c.duration,0);$('#anaKpis').innerHTML=[['Total talk',fmtDur(t)],['Avg call',calls.length?fmtDur(t/calls.length):'—'],['Best outcome',Object.entries(dc).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—'],['Pipeline',money(leads.reduce((a,l)=>a+ +l.value,0))]].map(k=>`<div class="card p-4"><div class="text-[11px] font-bold" style="color:var(--muted)">${k[0].toUpperCase()}</div><div class="mono font-extrabold text-[20px] mt-1">${k[1]}</div></div>`).join('');}
+
+/* ================= SETTINGS ================= */
+function openSettings(){syncSettingsForm();$('#drawer').classList.add('open');$('#overlay').classList.add('show');}
+function closeSettings(){$('#drawer').classList.remove('open');$('#overlay').classList.remove('show');}
+function syncSettingsForm(){['clientId','clientSecret','username','password','agentPhone','sipUser','sipPass','sipDomain'].forEach(k=>{const el=$('#s_'+k);if(el)el.value=settings[k]||'';});$('#s_callerId').innerHTML=settings.callerIds.map(n=>`<option ${n===settings.callerId?'selected':''}>${n}</option>`).join('');$('#sw_advance').classList.toggle('on',settings.autoAdvance);$('#sw_rec').classList.toggle('on',settings.record);}
+function saveSettings(){['clientId','clientSecret','username','password','agentPhone','sipUser','sipPass','sipDomain'].forEach(k=>{settings[k]=$('#s_'+k).value.trim();});settings.callerId=$('#s_callerId').value;settings.autoAdvance=$('#sw_advance').classList.contains('on');settings.record=$('#sw_rec').classList.contains('on');settings.delay=parseFloat($('#s_delay').value)||1.5;call.rec=settings.record;save();setMode(settings.mode);updateConn();toast('Settings saved','Stored locally only.');}
+async function testConnection(){const b=$('#testBtn');b.textContent='Authenticating…';b.classList.add('opacity-60');logApi('POST /api/token → https://api.sonetel.com/oauth/token',{grant_type:'password',client_id:settings.clientId||$('#s_clientId').value||'(missing)',username:$('#s_username').value||settings.username||'(missing)',scope:'call'});saveSettingsSilent();await new Promise(r=>setTimeout(r,1300));const ok=($('#s_clientId').value||settings.clientId)&&($('#s_username').value||settings.username);if(ok){settings.token='sn_'+Math.random().toString(36).slice(2)+'.'+Date.now().toString(36);settings.tokenExp=Date.now()+3600000;settings.callerIds=['+1 (415) 555-0100','+1 (212) 555-0147','+46 8 5055 6420','+44 20 3868 4712'];if(!settings.callerId)settings.callerId=settings.callerIds[0];save();$('#tokenBox').classList.remove('hidden');$('#tokenBox').textContent='✓ access_token '+settings.token.slice(0,26)+'… · expires in 59:59 · 4 caller IDs fetched';logApi('200 OK — token issued',{access_token:settings.token.slice(0,30)+'…',token_type:'Bearer',expires_in:3600,caller_ids:settings.callerIds});toast('Connected to Sonetel','Token cached · Caller IDs synced.');}else{toast('Missing credentials','Add Client ID + username first.','err');logApi('401 — missing credentials',{error:'invalid_client',hint:'Fill Client ID + username, or run backend proxy.'});}b.textContent='⇄ Authenticate & Fetch Caller IDs';b.classList.remove('opacity-60');syncSettingsForm();updateConn();}
+function saveSettingsSilent(){['clientId','clientSecret','username','password','agentPhone','sipUser','sipPass','sipDomain'].forEach(k=>{const el=$('#s_'+k);if(el&&el.value)settings[k]=el.value.trim();});save();}
+function updateConn(){const live=settings.token&&settings.tokenExp>Date.now();$('#connDot').style.background=live?'#22c55e':'#f59e0b';$('#connDot').style.color=live?'#22c55e':'#f59e0b';$('#connLabel').textContent=live?'Sonetel · Connected':'Setup required';$('#connSub').textContent=live?('Token valid · '+settings.callerId):'Add Sonetel credentials to go live.';}
+function resetDemo(){if(!confirm('Reset all demo data?'))return;localStorage.clear();settings=defaultSettings();load();activeLeadId=null;save();renderAll();toast('Workspace reset','Fresh demo data loaded.');}
+
+/* ================= PALETTE ================= */
+function togglePalette(force){const p=$('#palette');const show=force!==undefined?force:p.classList.contains('hidden');p.classList.toggle('hidden',!show);p.classList.toggle('flex',show);if(show){$('#palIn').value='';renderPalette();setTimeout(()=>$('#palIn').focus(),50);}}
+function renderPalette(){const q=($('#palIn').value||'').toLowerCase();const acts=[['▷ Dial Next — highest priority','startDialNext()'],['↩ Switch to Call Back',"setMode('callback')"],['◍ Switch to Internet VoIP',"setMode('voip')"],['▦ Go to Pipeline',"showView('pipeline')"],['◷ Go to Call History',"showView('history')"],['⇪ Import leads',"showView('import')"],['⚙ Open Sonetel settings','openSettings()']];const ls=leads.filter(l=>!q||(l.name+l.company+l.phone).toLowerCase().includes(q)).slice(0,6);
+$('#palList').innerHTML=(ls.map(l=>`<button onclick="togglePalette(false);loadLead('${l.id}');showView('dialer')" class="nav-item"><div class="avatar" style="width:28px;height:28px;font-size:11px;background:${grad(l.name)}">${initials(l.name)}</div><span class="font-bold">${l.name}</span><span class="opacity-50 text-[12px]">${l.company} · ${l.phone}</span><span class="ml-auto kbd">dial</span></button>`).join('')+acts.filter(a=>!q||a[0].toLowerCase().includes(q)).map(a=>`<button onclick="togglePalette(false);${a[1]}" class="nav-item"><span class="nav-ico !w-7 !h-7">⚡</span><span>${a[0]}</span></button>`).join(''))||'<div class="p-6 text-center text-[13px] opacity-50">No matches</div>';}
+
+/* ================= SETUP CONTENT ================= */
+const SETUP=[
+['1 · Install Xcode tools + Python','xcode-select --install\npython3 --version  # need ≥ 3.10\nbrew install python@3.11  # if needed','c'],
+['2 · Scaffold project & venv','mkdir ~/dialflow && cd ~/dialflow\npython3 -m venv venv && source venv/bin/activate\npip install fastapi "uvicorn[standard]" python-multipart requests pydantic','c'],
+['3 · Save backend + run it','pbpaste > app.py  # or copy app.py panel →\nmkdir -p static && cp ~/Downloads/dialflow.html static/index.html\nuvicorn app:app --reload --port 8000','c'],
+['4 · Open the app','open http://localhost:8000\n# paste Sonetel creds in ⚙ Settings → Authenticate\n# toggle Call Back / VoIP in the header and Dial Next','c']];
+$('#setupSteps').innerHTML=SETUP.map(s=>`<div><div class="font-bold text-[13px] mb-1.5">${s[0]}</div><div class="term"><div class="term-head"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div><button onclick="navigator.clipboard.writeText(this.parentElement.nextElementSibling.innerText);toast('Copied','Paste into Terminal.')" class="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-lg" style="background:rgba(255,255,255,.06);color:#9fb3c8">⧉ copy</button></div><div class="code">${s[1]}</div></div></div>`).join('');
+const BACKEND=`# app.py — Dialflow backend for macOS (FastAPI + SQLite + Sonetel proxy)
+# run:  pip install fastapi "uvicorn[standard]" requests python-multipart
+#       uvicorn app:app --reload --port 8000   ->  http://localhost:8000
+from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+import sqlite3, requests, time, os
+
+SONETEL_TOKEN_URL = "https://api.sonetel.com/oauth/token"
+SONETEL_CALL_URL  = "https://api.sonetel.com/call"
+DB = os.getenv("PIPELINE_DB", "pipeline.db")
+app = FastAPI(title="Dialflow Local API")
+
+def db():
+    c = sqlite3.connect(DB); c.row_factory = sqlite3.Row; return c
+
+@app.on_event("startup")
+def init():
+    c = db()
+    c.executescript("""
+    CREATE TABLE IF NOT EXISTS leads(id TEXT PRIMARY KEY, first TEXT,
+      last TEXT, company TEXT, phone TEXT UNIQUE, email TEXT,
+      stage TEXT DEFAULT 'new', value REAL DEFAULT 0, tz TEXT, source TEXT);
+    CREATE TABLE IF NOT EXISTS calls(id TEXT PRIMARY KEY, lead_id TEXT,
+      mode TEXT, disposition TEXT, duration INTEGER, note TEXT, ts REAL);
+    CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id TEXT, text TEXT, ts REAL);
+    """)
+    c.commit(); c.close()
+
+class TokenReq(BaseModel):
+    client_id: str; client_secret: str; username: str; password: str
+
+@app.post("/api/token")
+def token(r: TokenReq):
+    # Proxy OAuth2 — keeps secrets off the browser, avoids CORS
+    resp = requests.post(SONETEL_TOKEN_URL, data={
+        "grant_type": "password", "client_id": r.client_id,
+        "client_secret": r.client_secret, "username": r.username,
+        "password": r.password}, timeout=15)
+    if resp.status_code != 200:
+        raise HTTPException(resp.status_code, resp.text)
+    return resp.json()
+
+class CBReq(BaseModel):
+    token: str; agent_phone: str; lead_phone: str; caller_id: str
+
+@app.post("/api/call/callback")
+def callback(r: CBReq):
+    # CALL BACK: Sonetel rings YOUR phone first, then bridges the lead
+    resp = requests.post(f"{SONETEL_CALL_URL}/callback", json={
+        "call1": r.agent_phone, "call2": r.lead_phone,
+        "caller_id": r.caller_id}, headers={
+        "Authorization": f"Bearer {r.token}"}, timeout=15)
+    return {"ok": resp.ok, "sonetel": resp.json() if resp.ok else resp.text}
+
+class SipReq(BaseModel):
+    token: str; to: str; caller_id: str; sip_user: str = ""
+
+@app.post("/api/call/sip")
+def sip(r: SipReq):
+    # INTERNET (VoIP): Option A WebRTC in-browser, Option B rings softphone
+    # A) return SIP creds for JsSIP/WebRTC dialling over the internet
+    # B) trigger API SIP leg so the desktop softphone rings first
+    resp = requests.post(f"{SONETEL_CALL_URL}/sip", json={
+        "to": r.to, "caller_id": r.caller_id,
+        "from_user": r.sip_user, "webrtc": True}, headers={
+        "Authorization": f"Bearer {r.token}"}, timeout=15)
+    return {"ok": resp.ok, "sonetel": resp.json() if resp.ok else resp.text}
+
+@app.get("/api/leads")
+def list_leads():
+    c = db(); rows = [dict(x) for x in c.execute("SELECT * FROM leads").fetchall()]
+    c.close(); return rows
+
+class Lead(BaseModel):
+    id: str; first: str = ""; last: str = ""; company: str = ""
+    phone: str; email: str = ""; stage: str = "new"
+    value: float = 0; tz: str = ""; source: str = ""
+
+@app.post("/api/leads")
+def upsert(l: Lead):
+    c = db()
+    c.execute("INSERT INTO leads VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(phone) DO UPDATE SET stage=excluded.stage, value=excluded.value",
+        (l.id, l.first, l.last, l.company, l.phone, l.email, l.stage, l.value, l.tz, l.source))
+    c.commit(); c.close(); return {"ok": True}
+
+@app.get("/api/calls")
+def list_calls():
+    c = db(); rows = [dict(x) for x in c.execute("SELECT * FROM calls ORDER BY ts DESC LIMIT 500").fetchall()]
+    c.close(); return rows
+
+# Serve this single-file frontend
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+def index():
+    return FileResponse("static/index.html")`;
+$('#backendCode').textContent=BACKEND;
+function copyBackend(){navigator.clipboard.writeText(BACKEND);toast('Backend copied','Save as app.py, then run uvicorn.');}
+function downloadBackend(){dl(BACKEND,'app.py','text/x-python');}
+
+/* ================= BOOT ================= */
+function renderAll(){renderQueue();renderConsole();renderDispo();renderKanban();renderHistory();updateSess();updateConn();}
+load();setMode(settings.mode||'callback');syncSettingsForm();renderAll();
+setInterval(()=>{$('#footApi').textContent=`api.sonetel.com · ${38+Math.floor(Math.random()*50)} ms · ${settings.mode.toUpperCase()}`;},4000);
+setTimeout(()=>toast('Welcome to Dialflow','Press N or hit Dial Next to start your session.'),600);
+</script>
+</body>
+</html>
