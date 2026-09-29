@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dialflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dialflow}
+      POSTGRES_DB: dialflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # The API must not start migrating against a database that is still
+      # booting, so migrations are gated on this.
+      test: ['CMD-SHELL', 'pg_isready -U dialflow -d dialflow']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      target: build
+    command: npx prisma migrate deploy
+    environment:
+      DATABASE_URL: postgresql://dialflow:${POSTGRES_PASSWORD:-dialflow}@postgres:5432/dialflow?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    ports:
+      - '${PORT:-4000}:4000'
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      LOG_LEVEL: info
+      DATABASE_URL: postgresql://dialflow:${POSTGRES_PASSWORD:-dialflow}@postgres:5432/dialflow?schema=public
+      API_KEY: ${API_KEY:?set API_KEY in .env — generate with: node -e "console.log('df_'+require('crypto').randomBytes(32).toString('base64url'))"}
+      TELEPHONY_PROVIDER: ${TELEPHONY_PROVIDER:-mock}
+      SONETEL_BASE_URL: ${SONETEL_BASE_URL:-https://api.sonetel.com}
+      SONETEL_CLIENT_ID: ${SONETEL_CLIENT_ID:-}
+      SONETEL_CLIENT_SECRET: ${SONETEL_CLIENT_SECRET:-}
+      SONETEL_USERNAME: ${SONETEL_USERNAME:-}
+      SONETEL_PASSWORD: ${SONETEL_PASSWORD:-}
+      SONETEL_CALLER_ID: ${SONETEL_CALLER_ID:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1 minute}
+      # Docs are reachable on a private network; set true to remove them.
+      DISABLE_DOCS: ${DISABLE_DOCS:-false}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

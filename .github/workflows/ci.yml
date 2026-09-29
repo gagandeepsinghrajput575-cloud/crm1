@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: server
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        # DATABASE_URL is intentionally unset: the embedded PGlite adapter
+        # pushes the schema itself, so CI needs no database service.
+        env:
+          DATABASE_URL: ''
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ''
+          API_KEY: df_ci_key_for_github_actions_0123456789
+          TELEPHONY_PROVIDER: mock
+          DISABLE_DOCS: 'true'
+        run: npm test
+
+      - name: Build
+        env:
+          DATABASE_URL: ''
+          API_KEY: df_ci_key_for_github_actions_0123456789
+        run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Only build the image on the default branch and on PRs that touch it;
+    # a docs-only change should not spend ten minutes compiling layers.
+    if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'backend')
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          push: false
+          load: true
+          tags: dialflow-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the image
+        run: |
+          docker run -d --name dialflow -p 4000:4000 \
+            -e API_KEY=df_ci_key_for_github_actions_0123456789 \
+            -e TELEPHONY_PROVIDER=mock \
+            -e NODE_ENV=production \
+            dialflow-api:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4000/health/ready > /dev/null; then
+              echo "container healthy after ${i}s"
+              curl -fsS -H 'Authorization: Bearer df_ci_key_for_github_actions_0123456789' \
+                http://127.0.0.1:4000/api/settings/runtime
+              docker rm -f dialflow
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::container never became ready"
+          docker logs dialflow
+          docker rm -f dialflow
+          exit 1
